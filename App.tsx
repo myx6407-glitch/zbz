@@ -1,24 +1,34 @@
 
-import React, { useState, Suspense, useRef } from 'react';
+import React, { useState, Suspense, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Loader } from '@react-three/drei';
 import { Scene } from './components/Scene';
 import { TreeMorphState } from './types';
+import { GestureManager } from './components/GestureManager';
 
 function App() {
   const [treeState, setTreeState] = useState<TreeMorphState>(TreeMorphState.TREE_SHAPE);
   const [userImages, setUserImages] = useState<string[]>([]);
   const [photoScale, setPhotoScale] = useState<number>(1.5);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [isGestureEnabled, setIsGestureEnabled] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const toggleState = () => {
+  // Refs for high-frequency hand tracking data to avoid re-renders
+  const handXRef = useRef<number>(0.5);
+  const isHandActiveRef = useRef<boolean>(false);
+
+  const toggleState = useCallback(() => {
     setTreeState(prev => 
       prev === TreeMorphState.TREE_SHAPE 
         ? TreeMorphState.SCATTERED 
         : TreeMorphState.TREE_SHAPE
     );
-  };
+  }, []);
+
+  const handleGestureStateChange = useCallback((newState: TreeMorphState) => {
+    setTreeState(newState);
+  }, []);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -65,7 +75,7 @@ function App() {
   };
 
   return (
-    <div className="relative w-full h-screen bg-black text-white">
+    <div className="relative w-full h-screen bg-black text-white overflow-hidden">
       {/* Hidden File Inputs */}
       <input 
         type="file" 
@@ -74,6 +84,13 @@ function App() {
         multiple 
         accept="image/*" 
         onChange={handleFileUpload} 
+      />
+
+      <GestureManager 
+        active={isGestureEnabled} 
+        onStateChange={handleGestureStateChange} 
+        handXRef={handXRef}
+        isHandActiveRef={isHandActiveRef}
       />
 
       {/* Image Viewer Overlay */}
@@ -111,24 +128,28 @@ function App() {
       )}
 
       {/* 3D Canvas */}
-      <Canvas
-        shadows
-        dpr={[1, 2]}
-        gl={{ 
-          antialias: true, 
-          toneMapping: 3, // ACESToneMapping
-          toneMappingExposure: 1.2 
-        }}
-      >
-        <Suspense fallback={null}>
-          <Scene 
-            treeState={treeState} 
-            userImages={userImages} 
-            photoScale={photoScale} 
-            onPhotoClick={handlePhotoClick}
-          />
-        </Suspense>
-      </Canvas>
+      <div className="absolute inset-0">
+        <Canvas
+          shadows
+          dpr={[1, 2]}
+          gl={{ 
+            antialias: true, 
+            toneMapping: 3, 
+            toneMappingExposure: 1.2 
+          }}
+        >
+          <Suspense fallback={null}>
+            <Scene 
+              treeState={treeState} 
+              userImages={userImages} 
+              photoScale={photoScale} 
+              onPhotoClick={handlePhotoClick}
+              handXRef={handXRef}
+              isHandActiveRef={isHandActiveRef}
+            />
+          </Suspense>
+        </Canvas>
+      </div>
       
       {/* Loading Overlay */}
       <Loader 
@@ -141,7 +162,7 @@ function App() {
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none flex flex-col justify-between p-6 md:p-12 z-10">
         
         {/* Header / Logo Section */}
-        <header className="pointer-events-auto select-none">
+        <header className="pointer-events-auto select-none flex justify-between items-start">
           <div className="flex flex-col">
              <h1 className="text-4xl md:text-5xl font-bold tracking-widest text-white" style={{ fontFamily: 'Playfair Display, serif' }}>
                人生坐标
@@ -150,6 +171,17 @@ function App() {
                Life Coordinates
              </span>
           </div>
+          
+          <button 
+            onClick={() => setIsGestureEnabled(!isGestureEnabled)}
+            className={`pointer-events-auto flex items-center gap-3 px-4 py-2 border rounded-full transition-all duration-300
+              ${isGestureEnabled ? 'bg-cyan-500/20 border-cyan-400 text-cyan-400' : 'bg-white/5 border-white/20 text-white/60'}`}
+          >
+            <div className={`w-2 h-2 rounded-full ${isGestureEnabled ? 'bg-cyan-400 animate-pulse' : 'bg-white/40'}`}></div>
+            <span className="text-[10px] font-bold tracking-widest uppercase">
+              {isGestureEnabled ? '手势已启用' : '手势控制'}
+            </span>
+          </button>
         </header>
 
         {/* Center/Bottom Controls */}
@@ -157,7 +189,7 @@ function App() {
             
             {/* Scale Control (Visible only if images exist) */}
             {userImages.length > 0 && (
-              <div className="flex flex-col items-center w-full gap-2 bg-black/40 backdrop-blur-md p-4 rounded-lg border border-white/10 shadow-sm">
+              <div className="flex flex-col items-center w-full gap-2 bg-black/40 backdrop-blur-md p-4 rounded-lg border border-white/10 shadow-sm animate-in fade-in slide-in-from-bottom-4">
                 <div className="flex justify-between w-full">
                     <label className="text-[10px] font-bold tracking-widest text-white/70 uppercase">
                       照片大小
@@ -189,7 +221,8 @@ function App() {
                 >
                   <div className="absolute inset-0 w-0 bg-white transition-all duration-[250ms] ease-out group-hover:w-full opacity-10"></div>
                   <span className="relative z-10 text-white font-bold tracking-[0.2em] text-xs">
-                    {treeState === TreeMorphState.TREE_SHAPE ? '散落' : '聚合'}
+                    {/* Consistent label: shows the current effect name as requested */}
+                    {treeState === TreeMorphState.TREE_SHAPE ? '聚合' : '散开'}
                   </span>
                 </button>
 

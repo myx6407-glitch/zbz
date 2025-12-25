@@ -1,5 +1,7 @@
 {
   "name": "Life Coordinates",
   "description": "A high-fidelity interactive 3D experience featuring a morphing particle system in pink, blue, and yellow themes.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

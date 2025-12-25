@@ -14,9 +14,18 @@ interface SceneProps {
   userImages: string[];
   photoScale?: number;
   onPhotoClick: (url: string) => void;
+  handXRef: React.MutableRefObject<number>;
+  isHandActiveRef: React.MutableRefObject<boolean>;
 }
 
-export const Scene: React.FC<SceneProps> = ({ treeState, userImages, photoScale = 1.5, onPhotoClick }) => {
+export const Scene: React.FC<SceneProps> = ({ 
+  treeState, 
+  userImages, 
+  photoScale = 1.5, 
+  onPhotoClick,
+  handXRef,
+  isHandActiveRef
+}) => {
   // Animation progress state (0 to 1)
   const progressRef = useRef(0);
   const targetProgress = treeState === TreeMorphState.TREE_SHAPE ? 1 : 0;
@@ -27,6 +36,9 @@ export const Scene: React.FC<SceneProps> = ({ treeState, userImages, photoScale 
   const lastMouseX = useRef(0);
   const isDragging = useRef(false);
   const dragStartTime = useRef(0);
+
+  // For hand tracking delta logic
+  const lastHandX = useRef(0.5);
 
   // Helper to handle pointer events for custom rotation
   const handlePointerDown = (e: THREE.Event) => {
@@ -66,13 +78,42 @@ export const Scene: React.FC<SceneProps> = ({ treeState, userImages, photoScale 
     state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, 4 + Math.sin(t * 0.2) * 2, 0.01);
 
     // 3. Inertia Rotation Logic
-    if (!isDragging.current && groupRef.current) {
-        const friction = 0.95;
-        angularVelocity.current *= friction;
-        const idleSpeed = 0.05;
-        if (Math.abs(angularVelocity.current) < idleSpeed) {
-             angularVelocity.current = THREE.MathUtils.lerp(angularVelocity.current, idleSpeed, 0.05);
+    if (groupRef.current) {
+        if (isDragging.current) {
+            // Handled in handlePointerMove
+        } else if (isHandActiveRef.current) {
+            // Hand Gesture Rotation logic:
+            // Calculate delta of hand movement
+            const currentHandX = handXRef.current;
+            const handDelta = currentHandX - lastHandX.current;
+            
+            // Add to velocity based on hand movement speed
+            // Factor of 10.0 for responsiveness
+            angularVelocity.current += handDelta * 15.0;
+            
+            // Map absolute hand position to additional bias speed (joystick style)
+            // If hand is far right (X > 0.7), rotate right. If far left (X < 0.3), rotate left.
+            const centerBias = (currentHandX - 0.5);
+            if (Math.abs(centerBias) > 0.2) {
+                angularVelocity.current += centerBias * 0.1;
+            }
+
+            lastHandX.current = currentHandX;
         }
+
+        // Apply friction and basic spin
+        const friction = 0.96;
+        angularVelocity.current *= friction;
+        
+        // Idle spin if nothing is acting on it
+        const idleSpeed = 0.05;
+        if (!isDragging.current && !isHandActiveRef.current) {
+             if (Math.abs(angularVelocity.current) < idleSpeed) {
+                  angularVelocity.current = THREE.MathUtils.lerp(angularVelocity.current, idleSpeed, 0.05);
+             }
+             lastHandX.current = handXRef.current; // sync hand pos tracker
+        }
+
         groupRef.current.rotation.y += angularVelocity.current * delta;
     }
   });
