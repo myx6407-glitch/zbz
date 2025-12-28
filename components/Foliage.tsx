@@ -4,61 +4,59 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { getCrossPosition, getSpherePosition } from '../utils/math';
 
-// Custom Shader Material for the Foliage
 const foliageVertexShader = `
   uniform float uTime;
-  uniform float uProgress; // 0.0 = scatter, 1.0 = tree
+  uniform float uProgress; 
   
   attribute vec3 aScatterPos;
   attribute vec3 aTreePos;
   attribute float aPhase;
   attribute float aSize;
-  attribute float aColorIndex; // 0 = Pink, 1 = Yellow, 2 = Blue
+  attribute float aColorIndex; 
 
   varying float vAlpha;
   varying vec3 vColor;
 
   void main() {
-    // 1. Morph Position
     float t = smoothstep(0.0, 1.0, uProgress);
-    
+    // 基础插值位置
     vec3 currentPos = mix(aScatterPos, aTreePos, t);
 
-    // 2. Add "Breathing" / Wind effect
-    float breathe = sin(uTime * 2.0 + aPhase) * 0.1;
-    // Reduce chaos when in coordinate shape to keep lines clean
-    float chaos = cos(uTime * 0.5 + aPhase * 2.0) * 0.5 * (1.0 - t);
-    
-    // Slight movement along normal
-    currentPos += normalize(currentPos) * breathe * 0.2;
+    // 爆发效果：在从 1 变到 0 的转场初期（散开动作），增加一个径向推力
+    float explosion = smoothstep(0.8, 0.4, t) * smoothstep(0.0, 0.4, t) * 500.0;
+    currentPos += normalize(aScatterPos) * explosion;
+
+    // 动态扰动
+    float breathe = sin(uTime * 1.5 + aPhase) * 6.0 * (1.2 - t);
+    float chaos = cos(uTime * 0.4 + aPhase * 1.5) * 4.0 * (1.0 - t);
+    currentPos += normalize(currentPos) * breathe * 0.1;
     currentPos += chaos;
 
     vec4 mvPosition = modelViewMatrix * vec4(currentPos, 1.0);
     
-    // 3. Size attenuation
-    gl_PointSize = (aSize * 2.0) * (300.0 / -mvPosition.z);
+    // 散开时增加 30% 大小
+    float sizeMultiplier = mix(1.3, 1.0, t);
+    gl_PointSize = (aSize * 1.25 * sizeMultiplier) * (350.0 / -mvPosition.z);
 
-    // 4. Color logic - Life Coordinates Theme (Pink, Blue, Yellow)
-    // Neon colors for Black Background
-    vec3 colPink = vec3(1.0, 0.0, 0.8);     // Neon Pink
-    vec3 colYellow = vec3(1.0, 0.9, 0.0);   // Neon Yellow
-    vec3 colBlue = vec3(0.0, 0.8, 1.0);     // Neon Cyan
+    // 颜色配置
+    vec3 colRed = vec3(1.0, 0.2, 0.3);
+    vec3 colYellow = vec3(0.8, 0.64, 0.08); // 深金色
+    vec3 colBlue = vec3(0.1, 0.5, 1.0);
 
-    vec3 baseColor = colPink;
+    vec3 baseColor = colRed;
     if (aColorIndex > 1.5) {
         baseColor = colBlue;
     } else if (aColorIndex > 0.5) {
         baseColor = colYellow;
     }
 
-    // Add subtle variation/twinkle
-    float twinkle = sin(uTime * 3.0 + aPhase * 10.0);
-    vColor = baseColor + vec3(twinkle * 0.1);
+    // 爆发时的亮度提升
+    float flash = explosion * 0.002;
+    float twinkle = sin(uTime * 2.5 + aPhase * 8.0) * 0.1;
+    vColor = baseColor + vec3(twinkle + flash);
     
     gl_Position = projectionMatrix * mvPosition;
-    
-    // Distance fade
-    vAlpha = smoothstep(0.0, 0.2, uProgress * 0.5 + 0.5); 
+    vAlpha = smoothstep(0.0, 0.1, uProgress * 0.5 + 0.5); 
   }
 `;
 
@@ -67,25 +65,20 @@ const foliageFragmentShader = `
   varying float vAlpha;
   
   void main() {
-    // Circular particle with soft edge
     vec2 coord = gl_PointCoord - vec2(0.5);
     float dist = length(coord);
     if (dist > 0.5) discard;
-
-    // Soft glowy edge
-    float alpha = (1.0 - smoothstep(0.1, 0.5, dist)) * vAlpha;
-    
-    // Use full alpha (dimming removed)
+    float alpha = (1.0 - smoothstep(0.3, 0.5, dist)) * vAlpha;
     gl_FragColor = vec4(vColor, alpha);
   }
 `;
 
 interface FoliageProps {
   count?: number;
-  progress: number; // 0 to 1
+  progress: number;
 }
 
-export const Foliage: React.FC<FoliageProps> = ({ count = 12000, progress }) => {
+export const Foliage: React.FC<FoliageProps> = ({ count = 15000, progress }) => {
   const meshRef = useRef<THREE.Points>(null);
   
   const uniforms = useMemo(() => ({
@@ -101,30 +94,26 @@ export const Foliage: React.FC<FoliageProps> = ({ count = 12000, progress }) => 
     const ci = new Float32Array(count);
 
     for (let i = 0; i < count; i++) {
-      // Cross Shape (Coordinates)
-      const treeP = getCrossPosition(5000, 20, 5.0);
+      const axis = Math.floor(Math.random() * 3);
+      const treeP = getCrossPosition(4000, 6, 1.0, axis);
       pos[i * 3] = treeP[0];
       pos[i * 3 + 1] = treeP[1];
       pos[i * 3 + 2] = treeP[2];
 
-      const scatP = getSpherePosition(2500);
+      const scatP = getSpherePosition(3000);
       scat[i * 3] = scatP[0];
       scat[i * 3 + 1] = scatP[1];
       scat[i * 3 + 2] = scatP[2];
 
       ph[i] = Math.random() * Math.PI * 2;
-      sz[i] = Math.random() * 25 + 15; 
+      sz[i] = Math.random() * 12 + 8; 
       
-      ci[i] = Math.floor(Math.random() * 3);
+      if (axis === 0) ci[i] = 2.0; // X -> Blue
+      else if (axis === 1) ci[i] = 1.0; // Y -> Yellow
+      else ci[i] = 0.0; // Z -> Red
     }
 
-    return { 
-      positions: pos, 
-      scatterPositions: scat, 
-      phases: ph, 
-      sizes: sz,
-      colorIndices: ci
-    };
+    return { positions: pos, scatterPositions: scat, phases: ph, sizes: sz, colorIndices: ci };
   }, [count]);
 
   useFrame((state) => {
@@ -134,7 +123,7 @@ export const Foliage: React.FC<FoliageProps> = ({ count = 12000, progress }) => 
       material.uniforms.uProgress.value = THREE.MathUtils.lerp(
         material.uniforms.uProgress.value,
         progress,
-        0.05
+        0.08
       );
     }
   });
@@ -142,42 +131,12 @@ export const Foliage: React.FC<FoliageProps> = ({ count = 12000, progress }) => 
   return (
     <points ref={meshRef}>
       <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={positions.length / 3}
-          array={positions}
-          itemSize={3}
-        />
-        <bufferAttribute
-          attach="attributes-aTreePos"
-          count={positions.length / 3}
-          array={positions}
-          itemSize={3}
-        />
-        <bufferAttribute
-          attach="attributes-aScatterPos"
-          count={scatterPositions.length / 3}
-          array={scatterPositions}
-          itemSize={3}
-        />
-        <bufferAttribute
-          attach="attributes-aPhase"
-          count={phases.length}
-          array={phases}
-          itemSize={1}
-        />
-        <bufferAttribute
-          attach="attributes-aSize"
-          count={sizes.length}
-          array={sizes}
-          itemSize={1}
-        />
-        <bufferAttribute
-          attach="attributes-aColorIndex"
-          count={colorIndices.length}
-          array={colorIndices}
-          itemSize={1}
-        />
+        <bufferAttribute attach="attributes-position" count={positions.length / 3} array={positions} itemSize={3} />
+        <bufferAttribute attach="attributes-aTreePos" count={positions.length / 3} array={positions} itemSize={3} />
+        <bufferAttribute attach="attributes-aScatterPos" count={scatterPositions.length / 3} array={scatterPositions} itemSize={3} />
+        <bufferAttribute attach="attributes-aPhase" count={phases.length} array={phases} itemSize={1} />
+        <bufferAttribute attach="attributes-aSize" count={sizes.length} array={sizes} itemSize={1} />
+        <bufferAttribute attach="attributes-aColorIndex" count={colorIndices.length} array={colorIndices} itemSize={1} />
       </bufferGeometry>
       <shaderMaterial
         vertexShader={foliageVertexShader}
@@ -185,7 +144,7 @@ export const Foliage: React.FC<FoliageProps> = ({ count = 12000, progress }) => 
         uniforms={uniforms}
         transparent
         depthWrite={false}
-        blending={THREE.AdditiveBlending}
+        blending={THREE.NormalBlending}
       />
     </points>
   );

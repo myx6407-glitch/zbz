@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
-import { PerspectiveCamera, OrbitControls, Environment } from '@react-three/drei';
+import { useFrame, useThree, ThreeEvent } from '@react-three/fiber';
+import { PerspectiveCamera, OrbitControls, Environment, Lightformer } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { Foliage } from './Foliage';
@@ -16,6 +16,8 @@ interface SceneProps {
   onPhotoClick: (url: string) => void;
   handXRef: React.MutableRefObject<number>;
   isHandActiveRef: React.MutableRefObject<boolean>;
+  isDraggingPhoto: boolean;
+  setIsDraggingPhoto: (dragging: boolean) => void;
 }
 
 export const Scene: React.FC<SceneProps> = ({ 
@@ -24,96 +26,74 @@ export const Scene: React.FC<SceneProps> = ({
   photoScale = 1.5, 
   onPhotoClick,
   handXRef,
-  isHandActiveRef
+  isHandActiveRef,
+  isDraggingPhoto,
+  setIsDraggingPhoto
 }) => {
-  // Animation progress state (0 to 1)
   const progressRef = useRef(0);
   const targetProgress = treeState === TreeMorphState.TREE_SHAPE ? 1 : 0;
   
-  // Inertia Rotation Refs
   const groupRef = useRef<THREE.Group>(null);
-  const angularVelocity = useRef(0.2); // Initial auto-spin speed
+  const angularVelocity = useRef(0.015); // 初始怠速更慢
   const lastMouseX = useRef(0);
-  const isDragging = useRef(false);
-  const dragStartTime = useRef(0);
-
-  // For hand tracking delta logic
+  const isDraggingScene = useRef(false);
   const lastHandX = useRef(0.5);
 
-  // Helper to handle pointer events for custom rotation
-  const handlePointerDown = (e: THREE.Event) => {
-    isDragging.current = true;
+  const INITIAL_CAMERA_POS: [number, number, number] = [0, 500, 3500];
+  const INITIAL_DISTANCE = Math.sqrt(INITIAL_CAMERA_POS[1] ** 2 + INITIAL_CAMERA_POS[2] ** 2);
+
+  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    if (isDraggingPhoto) return;
+    isDraggingScene.current = true;
     lastMouseX.current = e.clientX;
-    dragStartTime.current = Date.now();
     angularVelocity.current = 0; 
     e.stopPropagation(); 
   };
 
   const handlePointerUp = () => {
-    isDragging.current = false;
+    isDraggingScene.current = false;
   };
 
-  const handlePointerMove = (e: THREE.Event) => {
-    if (isDragging.current && groupRef.current) {
+  const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
+    if (isDraggingScene.current && groupRef.current && !isDraggingPhoto) {
         const deltaX = e.clientX - lastMouseX.current;
         lastMouseX.current = e.clientX;
-        groupRef.current.rotation.y += deltaX * 0.005;
-        angularVelocity.current = deltaX * 0.05; 
+        // 降低灵敏度
+        groupRef.current.rotation.y += deltaX * 0.0015;
+        // 极大幅度减小惯性速度增量，防止转速太快
+        angularVelocity.current = deltaX * 0.008; 
     }
   };
 
   useFrame((state, delta) => {
-    // 1. Morph Progress Logic
-    const speed = 1.2;
-    const diff = targetProgress - progressRef.current;
+    progressRef.current = THREE.MathUtils.lerp(progressRef.current, targetProgress, delta * 4.0);
     
-    if (Math.abs(diff) > 0.001) {
-        progressRef.current += diff * speed * delta;
-    } else {
-        progressRef.current = targetProgress;
-    }
-    
-    // 2. Camera Gentle Float
-    const t = state.clock.elapsedTime;
-    state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, 4 + Math.sin(t * 0.2) * 2, 0.01);
-
-    // 3. Inertia Rotation Logic
     if (groupRef.current) {
-        if (isDragging.current) {
-            // Handled in handlePointerMove
-        } else if (isHandActiveRef.current) {
-            // Hand Gesture Rotation logic:
-            // Calculate delta of hand movement
+        if (isDraggingPhoto) {
+            angularVelocity.current = 0;
+            return;
+        }
+
+        // 进一步增大摩擦系数 (0.92 -> 0.9)，让转动停止得更稳重
+        const friction = 0.90;
+        
+        if (!isDraggingScene.current && isHandActiveRef.current) {
             const currentHandX = handXRef.current;
             const handDelta = currentHandX - lastHandX.current;
-            
-            // Add to velocity based on hand movement speed
-            // Factor of 10.0 for responsiveness
-            angularVelocity.current += handDelta * 15.0;
-            
-            // Map absolute hand position to additional bias speed (joystick style)
-            // If hand is far right (X > 0.7), rotate right. If far left (X < 0.3), rotate left.
-            const centerBias = (currentHandX - 0.5);
-            if (Math.abs(centerBias) > 0.2) {
-                angularVelocity.current += centerBias * 0.1;
-            }
-
+            // 降低手势响应速度
+            angularVelocity.current -= handDelta * 1.0; 
             lastHandX.current = currentHandX;
         }
 
-        // Apply friction and basic spin
-        const friction = 0.96;
         angularVelocity.current *= friction;
         
-        // Idle spin if nothing is acting on it
-        const idleSpeed = 0.05;
-        if (!isDragging.current && !isHandActiveRef.current) {
+        const idleSpeed = 0.015; // 基础怠速
+        if (!isDraggingScene.current && !isHandActiveRef.current) {
              if (Math.abs(angularVelocity.current) < idleSpeed) {
                   angularVelocity.current = THREE.MathUtils.lerp(angularVelocity.current, idleSpeed, 0.05);
              }
-             lastHandX.current = handXRef.current; // sync hand pos tracker
         }
-
+        
         groupRef.current.rotation.y += angularVelocity.current * delta;
     }
   });
@@ -122,22 +102,22 @@ export const Scene: React.FC<SceneProps> = ({
 
   return (
     <>
-      <color attach="background" args={['#000000']} />
-      
-      <PerspectiveCamera makeDefault position={[800, 600, 1500]} fov={45} far={15000} />
+      <PerspectiveCamera makeDefault position={INITIAL_CAMERA_POS} fov={45} far={15000} />
       
       <OrbitControls 
+        enabled={!isDraggingPhoto && !isHandActiveRef.current} 
         enablePan={false} 
         enableRotate={true}
         enableZoom={true}
+        target={[0, 0, 0]}
         minPolarAngle={Math.PI / 4} 
-        maxPolarAngle={Math.PI / 1.8}
-        minDistance={100}
-        maxDistance={8000}
-        minAzimuthAngle={0} 
-        maxAzimuthAngle={0} 
+        maxPolarAngle={Math.PI / 1.6}
+        minDistance={1000}
+        maxDistance={INITIAL_DISTANCE}
+        makeDefault
       />
 
+      {/* Background interaction catcher */}
       <mesh 
         position={[0, 0, 0]} 
         visible={false} 
@@ -146,43 +126,39 @@ export const Scene: React.FC<SceneProps> = ({
         onPointerLeave={handlePointerUp}
         onPointerMove={handlePointerMove}
       >
-        <planeGeometry args={[10000, 10000]} />
+        <planeGeometry args={[15000, 15000]} />
       </mesh>
 
       <ambientLight intensity={1.5} color="#ffffff" />
-      <directionalLight 
-        position={[500, 1000, 500]} 
-        intensity={0.8} 
-        color="#fffcf5" 
-      />
-      <Environment preset="city" environmentIntensity={0.5} />
+      <directionalLight position={[200, 1000, 200]} intensity={0.8} color="#ffffff" />
+
+      <Environment resolution={256}>
+        <group rotation={[Math.PI / 2, 0, 0]}>
+          <Lightformer form="rect" intensity={3} position={[0, 0, 10]} scale={[10, 10, 1]} />
+          <Lightformer form="ring" intensity={2} position={[0, 10, 0]} rotation-x={Math.PI / 2} scale={[20, 20, 1]} />
+        </group>
+      </Environment>
 
       <group ref={groupRef} position={[0, 0, 0]}>
         <Foliage 
-          count={12000} 
+          count={15000} 
           progress={progressRef.current} 
         />
-
         <GoldDust />
-
         {hasPhotos && (
            <PhotoOrnaments 
              images={userImages} 
              progress={progressRef.current}
              globalScale={photoScale}
              onPhotoClick={onPhotoClick}
+             onDragStateChange={setIsDraggingPhoto}
            />
         )}
       </group>
 
       <EffectComposer disableNormalPass>
-        <Bloom 
-          luminanceThreshold={0.2} 
-          mipmapBlur 
-          intensity={0.8} 
-          radius={0.6} 
-        />
-        <Vignette eskil={false} offset={0.1} darkness={0.5} />
+        <Bloom luminanceThreshold={0.9} mipmapBlur intensity={0.4} radius={0.3} />
+        <Vignette eskil={false} offset={0.05} darkness={0.15} />
       </EffectComposer>
     </>
   );

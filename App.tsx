@@ -1,39 +1,101 @@
 
-import React, { useState, Suspense, useRef, useCallback } from 'react';
+import React, { useState, Suspense, useRef, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Loader } from '@react-three/drei';
 import { Scene } from './components/Scene';
 import { TreeMorphState } from './types';
 import { GestureManager } from './components/GestureManager';
 
+const Logo: React.FC = () => (
+  <div className="flex items-center select-none pointer-events-auto transition-all duration-500">
+    <div className="relative">
+      <img 
+        src="https://file.uhsea.com/2512/c6ecfe403a3e29fa1d2afc9c8ead0238ZV.png" 
+        alt="人生坐标" 
+        className="h-20 md:h-28 w-auto object-contain filter"
+      />
+    </div>
+  </div>
+);
+
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const [isFading, setIsFading] = useState(false);
   const [treeState, setTreeState] = useState<TreeMorphState>(TreeMorphState.TREE_SHAPE);
   const [userImages, setUserImages] = useState<string[]>([]);
-  const [photoScale, setPhotoScale] = useState<number>(1.5);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [isGestureEnabled, setIsGestureEnabled] = useState<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState<boolean>(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  
+  const [viewingRotation, setViewingRotation] = useState(0);
+  const isRotating = useRef(false);
+  const startX = useRef(0);
 
-  // Refs for high-frequency hand tracking data to avoid re-renders
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const handXRef = useRef<number>(0.5);
   const isHandActiveRef = useRef<boolean>(false);
+  const lastGestureTime = useRef<number>(0);
+
+  const currentIndexRef = useRef(currentIndex);
+  const userImagesRef = useRef(userImages);
+  const viewingImageRef = useRef(viewingImage);
+  const treeStateRef = useRef(treeState);
+
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => { userImagesRef.current = userImages; }, [userImages]);
+  useEffect(() => { viewingImageRef.current = viewingImage; }, [viewingImage]);
+  useEffect(() => { treeStateRef.current = treeState; }, [treeState]);
+
+  const startExperience = () => {
+    setIsFading(true);
+    setTimeout(() => { setShowSplash(false); }, 1200);
+  };
+
+  const returnToSplash = () => {
+    setIsFading(false);
+    setShowSplash(true);
+  };
 
   const toggleState = useCallback(() => {
-    setTreeState(prev => 
-      prev === TreeMorphState.TREE_SHAPE 
-        ? TreeMorphState.SCATTERED 
-        : TreeMorphState.TREE_SHAPE
-    );
+    setTreeState(prev => prev === TreeMorphState.TREE_SHAPE ? TreeMorphState.SCATTERED : TreeMorphState.TREE_SHAPE);
   }, []);
 
   const handleGestureStateChange = useCallback((newState: TreeMorphState) => {
-    setTreeState(newState);
+    if (newState !== treeStateRef.current) {
+      setTreeState(newState);
+    }
+  }, []);
+
+  const handleGestureAction = useCallback((action: 'VIEW' | 'NEXT' | 'CLOSE') => {
+    const images = userImagesRef.current;
+    const now = Date.now();
+    if (now - lastGestureTime.current < 1000) return; 
+    lastGestureTime.current = now;
+
+    if (action === 'NEXT' && images.length > 0) {
+      const nextIdx = (currentIndexRef.current + 1) % images.length;
+      setCurrentIndex(nextIdx);
+      if (viewingImageRef.current) {
+        setViewingImage(images[nextIdx]);
+        setViewingRotation(0);
+      }
+    } else if (action === 'VIEW' && images.length > 0) {
+      if (!viewingImageRef.current) {
+        setViewingImage(images[currentIndexRef.current]);
+        setViewingRotation(0);
+      }
+    } else if (action === 'CLOSE') {
+      if (viewingImageRef.current) {
+        setViewingImage(null);
+      }
+    }
   }, []);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
-
     const newImages: string[] = [];
     Array.from(files).forEach((file: File) => {
       const reader = new FileReader();
@@ -42,6 +104,7 @@ function App() {
           newImages.push(e.target.result as string);
           if (newImages.length === files.length) {
             setUserImages(prev => [...prev, ...newImages]);
+            if (userImages.length === 0) setCurrentIndex(0);
           }
         }
       };
@@ -49,210 +112,247 @@ function App() {
     });
   };
 
-  const triggerFileUpload = () => {
-    fileInputRef.current?.click();
+  const navigatePhoto = (direction: 'prev' | 'next') => {
+    if (userImages.length === 0) return;
+    let newIdx = direction === 'next' 
+      ? (currentIndex + 1) % userImages.length 
+      : (currentIndex - 1 + userImages.length) % userImages.length;
+    setCurrentIndex(newIdx);
+    setViewingImage(userImages[newIdx]);
+    setViewingRotation(0);
   };
 
-  const handlePhotoClick = (url: string) => {
-    setViewingImage(url);
+  const handleViewPointerDown = (e: React.PointerEvent) => {
+    isRotating.current = true;
+    startX.current = e.clientX;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  const closeViewer = () => {
-    setViewingImage(null);
+  const handleViewPointerMove = (e: React.PointerEvent) => {
+    if (!isRotating.current) return;
+    const deltaX = e.clientX - startX.current;
+    startX.current = e.clientX;
+    setViewingRotation(prev => prev + deltaX * 0.5);
   };
 
-  const handleDeletePhoto = () => {
-    if (viewingImage) {
-      setUserImages(prev => prev.filter(img => img !== viewingImage));
-      setViewingImage(null);
-    }
+  const handleViewPointerUp = (e: React.PointerEvent) => {
+    isRotating.current = false;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
   const clearAllPhotos = () => {
-    if (window.confirm("确定要清空所有记忆吗？")) {
-        setUserImages([]);
-    }
+    setUserImages([]);
+    setShowClearConfirm(false);
   };
 
   return (
-    <div className="relative w-full h-screen bg-black text-white overflow-hidden">
-      {/* Hidden File Inputs */}
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        className="hidden" 
-        multiple 
-        accept="image/*" 
-        onChange={handleFileUpload} 
-      />
+    <div 
+      className="relative w-full h-screen text-black overflow-hidden font-['Montserrat']"
+      style={{
+        backgroundImage: "url('https://file.uhsea.com/2512/c561d2074eb963ef1ab0c38efbca7a84ZR.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
+      
+      {/* Main UI Layer */}
+      <div className={`absolute inset-0 z-10 pointer-events-none p-6 flex flex-col justify-between transition-opacity duration-1000 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
+        <div className="flex justify-between items-start">
+          <div className="flex flex-col gap-4 items-start pointer-events-auto">
+            <Logo />
+            <div className="flex flex-col gap-3">
+              <button onClick={returnToSplash} className="flex items-center justify-center w-12 h-12 bg-white/40 backdrop-blur-md border border-black/5 rounded-full hover:bg-black hover:text-white hover:scale-110 active:scale-95 transition-all duration-500 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
+              </button>
+              <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center w-12 h-12 bg-white/40 backdrop-blur-md border border-black/5 rounded-full hover:bg-black hover:text-white hover:scale-110 active:scale-95 transition-all duration-500 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+              </button>
+              <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple accept="image/*" className="hidden" />
+            </div>
+          </div>
 
-      <GestureManager 
-        active={isGestureEnabled} 
-        onStateChange={handleGestureStateChange} 
-        handXRef={handXRef}
-        isHandActiveRef={isHandActiveRef}
-      />
+          <div className="flex flex-col gap-4 items-end pointer-events-auto">
+            <button 
+              onClick={() => setIsGestureEnabled(!isGestureEnabled)}
+              className={`px-6 py-2 rounded-full border border-black/10 transition-all duration-300 shadow-sm text-xs font-bold tracking-widest uppercase ${isGestureEnabled ? 'bg-neutral-800 text-white border-neutral-800 scale-105' : 'bg-white text-black hover:bg-black/5'}`}
+            >
+              {isGestureEnabled ? '退出手势' : '开启手势'}
+            </button>
+            <GestureManager 
+              active={isGestureEnabled} 
+              onStateChange={handleGestureStateChange}
+              onGestureAction={handleGestureAction}
+              handXRef={handXRef}
+              isHandActiveRef={isHandActiveRef}
+            />
+          </div>
+        </div>
 
-      {/* Image Viewer Overlay */}
+        <div className="flex justify-between items-end pointer-events-auto w-full">
+          <div className="flex flex-col gap-4 items-start">
+            {userImages.length > 0 && (
+              <div className="bg-black/5 px-4 py-2 rounded-full backdrop-blur-sm mb-2 border border-black/5 flex items-center gap-3">
+                <span className="text-[10px] font-black tracking-widest text-black/40">
+                  {currentIndex + 1} / {userImages.length}
+                </span>
+                <div className="w-12 h-[1px] bg-black/10"></div>
+                <span className="text-[9px] font-bold text-black/20 uppercase tracking-tighter italic">Double click to focus</span>
+              </div>
+            )}
+            <button 
+              onClick={toggleState}
+              className={`px-10 py-4 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all text-xs font-black tracking-[0.3em] uppercase border ${treeState === TreeMorphState.TREE_SHAPE ? 'bg-black text-white border-black' : 'bg-white text-black border-black/10'}`}
+            >
+              {treeState === TreeMorphState.TREE_SHAPE ? '散开形态 / SCATTER' : '坐标轴形态 / AXIS'}
+            </button>
+          </div>
+
+          {userImages.length > 0 && (
+            <button 
+              onClick={() => setShowClearConfirm(true)} 
+              className="px-4 py-2 text-[9px] font-bold text-black/30 hover:text-red-500 transition-colors uppercase tracking-[0.2em]"
+            >
+              清空照片 / RESET
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center pointer-events-auto p-6 animate-in fade-in duration-300">
+           <div className="bg-white max-w-sm w-full p-12 rounded-3xl flex flex-col items-center text-center gap-10 shadow-2xl border border-white/20">
+              <div className="flex flex-col gap-2">
+                <h3 className="text-sm font-black tracking-[0.3em] uppercase text-black">确认清空所有照片？</h3>
+                <p className="text-[10px] font-bold text-black/30 tracking-widest uppercase">This action cannot be undone.</p>
+              </div>
+              <div className="flex flex-col w-full gap-3">
+                <button 
+                  onClick={clearAllPhotos} 
+                  className="w-full py-5 bg-black text-white rounded-xl text-[11px] font-black tracking-[0.4em] uppercase hover:bg-neutral-800 transition-all active:scale-95"
+                >
+                  确认 / CONFIRM
+                </button>
+                <button 
+                  onClick={() => setShowClearConfirm(false)} 
+                  className="w-full py-5 bg-white text-black border border-black/10 rounded-xl text-[11px] font-black tracking-[0.4em] uppercase hover:bg-black/5 transition-all active:scale-95"
+                >
+                  取消 / CANCEL
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Canvas Layer */}
+      <div className={`absolute inset-0 z-0 transition-opacity duration-[2000ms] ${showSplash ? 'opacity-0 scale-95 blur-md' : 'opacity-100 scale-100 blur-0'}`}>
+        <Suspense fallback={null}>
+          <Canvas shadows gl={{ alpha: true }}>
+            <Scene 
+              treeState={treeState}
+              userImages={userImages}
+              onPhotoClick={(url) => {
+                const idx = userImages.indexOf(url);
+                if (idx !== -1) setCurrentIndex(idx);
+                setViewingImage(url);
+                setViewingRotation(0);
+              }}
+              handXRef={handXRef}
+              isHandActiveRef={isHandActiveRef}
+              isDraggingPhoto={isDraggingPhoto}
+              setIsDraggingPhoto={setIsDraggingPhoto}
+            />
+          </Canvas>
+          <Loader />
+        </Suspense>
+      </div>
+
+      {/* Photo Viewer */}
       {viewingImage && (
-        <div 
-          className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-300"
-          onClick={closeViewer}
-        >
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none animate-in fade-in duration-500 overflow-hidden" style={{ perspective: '1200px' }}>
+          <div className="absolute inset-0 cursor-zoom-out pointer-events-auto" onClick={() => setViewingImage(null)} />
+          
+          <button 
+            className="absolute left-8 z-[60] p-6 text-black/30 hover:text-black hover:scale-125 transition-all pointer-events-auto hidden md:block"
+            onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }}
+          >
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+
+          <button 
+            className="absolute right-8 z-[60] p-6 text-black/30 hover:text-black hover:scale-125 transition-all pointer-events-auto hidden md:block"
+            onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }}
+          >
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+
           <div 
-            className="relative p-1 border border-white/20 bg-black shadow-2xl mb-6"
-            onClick={(e) => e.stopPropagation()}
+            className="relative group max-w-[90vw] max-h-[90vh] pointer-events-auto animate-in zoom-in-95 duration-500 touch-none select-none cursor-grab active:cursor-grabbing" 
+            onClick={e => e.stopPropagation()}
+            onPointerDown={handleViewPointerDown}
+            onPointerMove={handleViewPointerMove}
+            onPointerUp={handleViewPointerUp}
+            onPointerCancel={handleViewPointerUp}
+            style={{ 
+              transform: `rotateY(${viewingRotation}deg)`,
+              transformStyle: 'preserve-3d',
+              transition: isRotating.current ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)'
+            }}
           >
             <img 
               src={viewingImage} 
-              alt="Memory" 
-              className="max-h-[65vh] max-w-[90vw] object-contain"
+              alt="Viewing" 
+              className="max-w-full max-h-[80vh] object-contain" 
+              draggable={false}
             />
+            
+            <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 flex justify-center w-full" style={{ transform: 'translateZ(50px)' }}>
+               <button onClick={() => setViewingImage(null)} className="px-10 py-3 bg-black text-white border border-white/10 rounded-full text-[11px] font-black tracking-widest uppercase hover:scale-105 transition-all shadow-xl">关闭 / CLOSE</button>
+            </div>
           </div>
-          
-          <div className="flex gap-4" onClick={(e) => e.stopPropagation()}>
-             <button
-                onClick={handleDeletePhoto}
-                className="px-6 py-2 bg-transparent border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-300 font-bold text-xs tracking-widest"
-              >
-                删除
-              </button>
-              <button
-                onClick={closeViewer}
-                className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white font-bold tracking-widest text-xs border border-white/30 transition-all duration-300"
-              >
-                关闭
-              </button>
+
+          <div className="absolute bottom-10 text-[9px] font-bold text-black/20 uppercase tracking-[0.2em]">
+             COORDINATES ILLUSTRATED
           </div>
         </div>
       )}
 
-      {/* 3D Canvas */}
-      <div className="absolute inset-0">
-        <Canvas
-          shadows
-          dpr={[1, 2]}
-          gl={{ 
-            antialias: true, 
-            toneMapping: 3, 
-            toneMappingExposure: 1.2 
-          }}
-        >
-          <Suspense fallback={null}>
-            <Scene 
-              treeState={treeState} 
-              userImages={userImages} 
-              photoScale={photoScale} 
-              onPhotoClick={handlePhotoClick}
-              handXRef={handXRef}
-              isHandActiveRef={isHandActiveRef}
-            />
-          </Suspense>
-        </Canvas>
-      </div>
-      
-      {/* Loading Overlay */}
-      <Loader 
-        containerStyles={{ background: '#000000' }}
-        barStyles={{ background: '#ffffff', height: '2px' }}
-        dataStyles={{ fontFamily: 'Montserrat', fontSize: '12px', color: '#ffffff', fontWeight: 600 }}
-      />
-
-      {/* UI Overlay */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none flex flex-col justify-between p-6 md:p-12 z-10">
-        
-        {/* Header / Logo Section */}
-        <header className="pointer-events-auto select-none flex justify-between items-start">
-          <div className="flex flex-col">
-             <h1 className="text-4xl md:text-5xl font-bold tracking-widest text-white" style={{ fontFamily: 'Playfair Display, serif' }}>
-               人生坐标
-             </h1>
-             <span className="text-[10px] md:text-xs tracking-[0.4em] text-white/60 mt-2 pl-1 uppercase font-light">
-               Life Coordinates
-             </span>
-          </div>
+      {/* Splash Screen Layer */}
+      {showSplash && (
+        <div className={`absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white transition-all duration-[1200ms] ${isFading ? 'opacity-0 scale-110 blur-xl pointer-events-none' : 'opacity-100 scale-100 blur-0'}`}>
           
-          <button 
-            onClick={() => setIsGestureEnabled(!isGestureEnabled)}
-            className={`pointer-events-auto flex items-center gap-3 px-4 py-2 border rounded-full transition-all duration-300
-              ${isGestureEnabled ? 'bg-cyan-500/20 border-cyan-400 text-cyan-400' : 'bg-white/5 border-white/20 text-white/60'}`}
-          >
-            <div className={`w-2 h-2 rounded-full ${isGestureEnabled ? 'bg-cyan-400 animate-pulse' : 'bg-white/40'}`}></div>
-            <span className="text-[10px] font-bold tracking-widest uppercase">
-              {isGestureEnabled ? '手势已启用' : '手势控制'}
-            </span>
-          </button>
-        </header>
-
-        {/* Center/Bottom Controls */}
-        <div className="flex flex-col items-center pointer-events-auto pb-12 gap-6 w-full max-w-md mx-auto">
-            
-            {/* Scale Control (Visible only if images exist) */}
-            {userImages.length > 0 && (
-              <div className="flex flex-col items-center w-full gap-2 bg-black/40 backdrop-blur-md p-4 rounded-lg border border-white/10 shadow-sm animate-in fade-in slide-in-from-bottom-4">
-                <div className="flex justify-between w-full">
-                    <label className="text-[10px] font-bold tracking-widest text-white/70 uppercase">
-                      照片大小
-                    </label>
-                    <button 
-                        onClick={clearAllPhotos}
-                        className="text-[10px] font-bold tracking-widest text-red-500 hover:text-red-400 uppercase underline"
-                    >
-                        清空图库
-                    </button>
-                </div>
-                <input 
-                  type="range" 
-                  min="0.5" 
-                  max="4.0" 
-                  step="0.1" 
-                  value={photoScale}
-                  onChange={(e) => setPhotoScale(parseFloat(e.target.value))}
-                  className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-white hover:accent-gray-300"
-                />
+          {/* Axis Labels - Bottom Left of Splash Screen */}
+          <div className="absolute bottom-10 left-10 flex flex-col gap-2.5">
+            {[
+              "X轴 / 婚姻阶段 Marriage stage",
+              "Y轴 / 情感态度 Emotional attitude",
+              "Z轴 / 年龄 Age"
+            ].map((text, i) => (
+              <div key={i} className="bg-white/5 backdrop-blur-sm border border-black/5 px-4 py-2 rounded-md self-start">
+                <span className="text-[10px] font-bold text-black/20 uppercase tracking-[0.2em] leading-none">
+                  {text}
+                </span>
               </div>
-            )}
+            ))}
+          </div>
 
-            {/* Control Buttons Group */}
-            <div className="flex space-x-4">
-                <button
-                  onClick={toggleState}
-                  className="group relative px-6 py-3 md:px-8 md:py-3 bg-transparent border border-white/30 hover:border-white overflow-hidden transition-all duration-300 backdrop-blur-sm"
-                >
-                  <div className="absolute inset-0 w-0 bg-white transition-all duration-[250ms] ease-out group-hover:w-full opacity-10"></div>
-                  <span className="relative z-10 text-white font-bold tracking-[0.2em] text-xs">
-                    {/* Consistent label: shows the current effect name as requested */}
-                    {treeState === TreeMorphState.TREE_SHAPE ? '聚合' : '散开'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={triggerFileUpload}
-                  className="group relative px-6 py-3 md:px-8 md:py-3 bg-transparent border border-white/30 hover:border-white overflow-hidden transition-all duration-300 backdrop-blur-sm"
-                >
-                  <div className="absolute inset-0 w-0 bg-white transition-all duration-[250ms] ease-out group-hover:w-full opacity-10"></div>
-                  <span className="relative z-10 text-white font-bold tracking-[0.2em] text-xs">
-                    {userImages.length > 0 ? '添加记忆' : '上传记忆'}
-                  </span>
-                </button>
+          <div className="flex flex-col items-center max-w-2xl text-center gap-20 px-12">
+            <div className="scale-[1.8] mb-8"><Logo /></div>
+            <div className="space-y-6">
+              <h2 className="text-[11px] font-bold tracking-[0.4em] uppercase text-black/60 leading-relaxed">
+                从没有“标准人生”，<br/>而是找到属于自己的平衡。
+              </h2>
             </div>
-            
-            <div className="flex gap-4 mt-2">
-                <div className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${treeState === TreeMorphState.TREE_SHAPE ? 'bg-[#00BBFF]' : 'bg-gray-700'}`}></div>
-                <div className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${treeState === TreeMorphState.TREE_SHAPE ? 'bg-[#FF00AA]' : 'bg-gray-700'}`}></div>
-                <div className={`h-1.5 w-1.5 rounded-full transition-colors duration-500 ${treeState === TreeMorphState.TREE_SHAPE ? 'bg-[#FFDD00]' : 'bg-gray-700'}`}></div>
-            </div>
+            <button onClick={startExperience} className="group relative px-16 py-6 rounded-full shadow-[0_35px_60px_-15px_rgba(0,0,0,0.1)] hover:scale-105 transition-all bg-white border border-black/10">
+              <div className="relative flex flex-col items-center gap-1.5">
+                <span className="text-black text-[13px] font-black tracking-[0.5em] uppercase">开始探索</span>
+                <span className="text-black/30 text-[8px] font-bold tracking-[0.7em] uppercase">ENTER</span>
+              </div>
+            </button>
+          </div>
         </div>
-
-        {/* Footer info */}
-        <div className="absolute bottom-4 right-4 md:bottom-10 md:right-10 hidden md:block text-right">
-             <div className="flex flex-col items-end space-y-1 text-white/50">
-                <span className="text-[10px] font-bold px-2 py-1 tracking-widest border border-white/10">X: 婚姻现状</span>
-                <span className="text-[10px] font-bold px-2 py-1 tracking-widest border border-white/10">Y: 情感态度</span>
-                <span className="text-[10px] font-bold px-2 py-1 tracking-widest border border-white/10">Z: 年龄</span>
-             </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

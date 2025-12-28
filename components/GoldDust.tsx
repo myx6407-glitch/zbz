@@ -5,8 +5,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 
 const dustVertexShader = `
   uniform float uTime;
-  uniform vec3 uMouse; // World position of mouse
-  uniform float uHover; // 0 or 1, is mouse active
+  uniform vec3 uMouse;
+  uniform float uHover;
 
   attribute float aSize;
   attribute float aPhase;
@@ -17,42 +17,27 @@ const dustVertexShader = `
   void main() {
     vec3 pos = position;
 
-    // 1. Base Floating Animation
     float t = uTime * 0.5;
     pos.y += sin(t + aPhase) * 20.0;
     pos.x += cos(t * 0.5 + aPhase) * 10.0;
     
-    // 2. Mouse Attraction (Magical Effect)
-    // Calculate distance to mouse target
     float d = distance(pos, uMouse);
     float attractRadius = 800.0;
     
     if (d < attractRadius && uHover > 0.5) {
-        // Calculate attraction vector
         vec3 dir = normalize(uMouse - pos);
-        
-        // Strength increases as you get closer, but clamp it to avoid singularity
         float strength = (1.0 - d / attractRadius);
-        strength = pow(strength, 2.0); // Non-linear falloff
-        
-        // Move towards mouse
-        // Add a bit of swirl based on cross product or noise
+        strength = pow(strength, 2.0);
         pos += dir * strength * 200.0;
-        
-        // Swirl
         vec3 swirl = cross(dir, vec3(0.0, 1.0, 0.0));
         pos += swirl * strength * 50.0;
     }
 
     vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-    
-    // Size attenuation
     gl_PointSize = aSize * (1000.0 / -mvPosition.z);
-    
     gl_Position = projectionMatrix * mvPosition;
 
-    // Fade out at edges or based on animation
-    vAlpha = 0.8 + 0.2 * sin(uTime * 3.0 + aPhase);
+    vAlpha = 0.4 + 0.2 * sin(uTime * 2.0 + aPhase); // Lower alpha for white BG
   }
 `;
 
@@ -62,24 +47,22 @@ const dustFragmentShader = `
   void main() {
     vec2 coord = gl_PointCoord - vec2(0.5);
     float dist = length(coord);
-    
     if (dist > 0.5) discard;
     
-    // Golden Glow
     float strength = 1.0 - (dist * 2.0);
-    strength = pow(strength, 1.5); // Slightly softer falloff
+    strength = pow(strength, 2.0);
     
-    // Bright Gold for Black Background
-    vec3 goldColor = vec3(1.0, 0.85, 0.2); 
+    // Charcoal / Ink color for white background
+    vec3 dustColor = vec3(0.2, 0.2, 0.25); 
     
-    gl_FragColor = vec4(goldColor, strength * vAlpha);
+    gl_FragColor = vec4(dustColor, strength * vAlpha);
   }
 `;
 
 export const GoldDust = () => {
-  const count = 1500;
+  const count = 1000;
   const meshRef = useRef<THREE.Points>(null);
-  const { size, viewport, camera } = useThree();
+  const { camera } = useThree();
   const mousePlane = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0));
   const raycaster = useRef(new THREE.Raycaster());
   const mousePos3D = useRef(new THREE.Vector3(0, 0, 0));
@@ -95,18 +78,14 @@ export const GoldDust = () => {
     const sz = new Float32Array(count);
     const ph = new Float32Array(count);
     const rv = new Float32Array(count * 3);
-    
-    // Spread dust across a large volume
-    const spread = 4000;
+    const spread = 5000;
 
     for (let i = 0; i < count; i++) {
       pos[i * 3] = (Math.random() - 0.5) * spread;
       pos[i * 3 + 1] = (Math.random() - 0.5) * spread;
       pos[i * 3 + 2] = (Math.random() - 0.5) * spread;
-
-      sz[i] = Math.random() * 8 + 2; // Particle size
+      sz[i] = Math.random() * 6 + 2; 
       ph[i] = Math.random() * Math.PI * 2;
-      
       rv[i * 3] = Math.random();
       rv[i * 3 + 1] = Math.random();
       rv[i * 3 + 2] = Math.random();
@@ -116,25 +95,19 @@ export const GoldDust = () => {
 
   useFrame((state) => {
     if (!meshRef.current) return;
-    
-    // 1. Update Time
-    meshRef.current.material.uniforms.uTime.value = state.clock.elapsedTime;
-
-    // 2. Raycast to find mouse world position on a plane facing camera
-    // We update the invisible plane to always face camera
+    // Fixed: cast material to ShaderMaterial to access uniforms property
+    const material = meshRef.current.material as THREE.ShaderMaterial;
+    material.uniforms.uTime.value = state.clock.elapsedTime;
     mousePlane.current.normal.copy(camera.position).normalize();
-    
     raycaster.current.setFromCamera(state.pointer, camera);
     const target = new THREE.Vector3();
     raycaster.current.ray.intersectPlane(mousePlane.current, target);
-    
     if (target) {
-        // Lerp for smooth movement of the attraction point
         mousePos3D.current.lerp(target, 0.1);
-        meshRef.current.material.uniforms.uMouse.value.copy(mousePos3D.current);
-        meshRef.current.material.uniforms.uHover.value = 1.0;
+        material.uniforms.uMouse.value.copy(mousePos3D.current);
+        material.uniforms.uHover.value = 1.0;
     } else {
-        meshRef.current.material.uniforms.uHover.value = 0.0;
+        material.uniforms.uHover.value = 0.0;
     }
   });
 
@@ -152,7 +125,7 @@ export const GoldDust = () => {
         uniforms={uniforms}
         transparent
         depthWrite={false}
-        blending={THREE.AdditiveBlending} // Additive for glow
+        blending={THREE.NormalBlending} 
       />
     </points>
   );

@@ -53,10 +53,11 @@ export const getOffAxisPosition = (radius: number, axisThreshold: number): [numb
 export const getCrossPosition = (
   armLength: number,
   thickness: number,
-  randomness: number = 0
+  randomness: number = 0,
+  specificAxis?: number
 ): [number, number, number] => {
   // Select an axis: 0=X, 1=Y, 2=Z
-  const axis = Math.floor(Math.random() * 3);
+  const axis = specificAxis !== undefined ? specificAxis : Math.floor(Math.random() * 3);
   
   // Position along the main axis (long bar)
   const longPos = (Math.random() - 0.5) * armLength;

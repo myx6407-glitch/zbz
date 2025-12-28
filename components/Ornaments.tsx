@@ -21,7 +21,6 @@ const addBox = (
   tx: number, ty: number, tz: number,
   rx: number = 0, rz: number = 0
 ) => {
-  // Create temp geometry to get data
   const geo = new THREE.BoxGeometry(w, h, d);
   geo.rotateZ(rz);
   geo.rotateX(rx);
@@ -44,33 +43,27 @@ const addBox = (
   }
 };
 
-// Create a merged geometry representing the Character "人" (Ren)
 const createRenGeometry = () => {
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];
 
-  // Dimensions for the strokes
   const strokeWidth = 0.18;
   const strokeDepth = 0.18;
   const strokeLength = 0.9;
   
-  // 1. Left Stroke (撇) - Leaning left
-  // Starts high, goes down-left
   addBox(
     positions, normals, indices, 
     strokeWidth, strokeLength, strokeDepth, 
-    -0.2, 0, 0, // Position
-    0, 0.5 // Rotation Z (approx 28 degrees)
+    -0.2, 0, 0,
+    0, 0.5
   );
 
-  // 2. Right Stroke (捺) - Leaning right
-  // Starts slightly lower on the left stroke to form the junction, goes down-right
   addBox(
     positions, normals, indices, 
     strokeWidth, strokeLength, strokeDepth, 
-    0.2, 0, 0, // Position
-    0, -0.5 // Rotation Z
+    0.2, 0, 0,
+    0, -0.5
   );
 
   const geometry = new THREE.BufferGeometry();
@@ -86,10 +79,8 @@ export const Ornaments: React.FC<OrnamentsProps> = ({ count, progress, colorPale
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const tempObj = useMemo(() => new THREE.Object3D(), []);
 
-  // Generate Custom "Ren" Character Geometry
   const geometry = useMemo(() => createRenGeometry(), []);
 
-  // Standard Material
   const material = useMemo(() => {
     return new THREE.MeshStandardMaterial({
       roughness: 0.3,
@@ -98,16 +89,12 @@ export const Ornaments: React.FC<OrnamentsProps> = ({ count, progress, colorPale
     });
   }, []);
 
-  // Generate Data
   const data = useMemo(() => {
     const items: DualPosition[] = [];
     const colors = new Float32Array(count * 3);
 
     for (let i = 0; i < count; i++) {
-      // Tree Position: Along the coordinate cross
       const treePosRaw = getCrossPosition(20, 2.5, 0.1);
-      
-      // Scatter Position
       const scatterPosRaw = getSpherePosition(22);
 
       items.push({
@@ -118,7 +105,6 @@ export const Ornaments: React.FC<OrnamentsProps> = ({ count, progress, colorPale
         scale: Math.random() * 0.4 + 0.6,
       });
 
-      // Assign color
       const colorHex = colorPalette[Math.floor(Math.random() * colorPalette.length)];
       const color = new THREE.Color(colorHex);
       colors[i * 3] = color.r;
@@ -129,56 +115,45 @@ export const Ornaments: React.FC<OrnamentsProps> = ({ count, progress, colorPale
   }, [count, colorPalette]);
 
   useLayoutEffect(() => {
-    if (meshRef.current) {
+    if (meshRef.current && count > 0) {
       for (let i = 0; i < count; i++) {
         meshRef.current.setColorAt(i, new THREE.Color(data.colors[i * 3], data.colors[i * 3 + 1], data.colors[i * 3 + 2]));
       }
-      meshRef.current.instanceColor!.needsUpdate = true;
+      // instanceColor is created lazily by Three.js inside setColorAt if not present
+      if (meshRef.current.instanceColor) {
+        meshRef.current.instanceColor.needsUpdate = true;
+      }
     }
   }, [count, data]);
 
   useFrame((state) => {
-    if (!meshRef.current) return;
+    if (!meshRef.current || count === 0) return;
 
     const t = state.clock.elapsedTime;
-    
-    // Smooth transition logic
     const easeProgress = progress * progress * (3 - 2 * progress); 
     
     for (let i = 0; i < count; i++) {
       const { tree, scatter, rotationSpeed, phaseOffset, scale } = data.items[i];
 
-      // Interpolate Position
       const x = THREE.MathUtils.lerp(scatter[0], tree[0], easeProgress);
       const y = THREE.MathUtils.lerp(scatter[1], tree[1], easeProgress);
       const z = THREE.MathUtils.lerp(scatter[2], tree[2], easeProgress);
 
-      // Add floaty physics
-      // Less float when assembled (structured feel)
       const floatAmp = (1 - easeProgress) * 0.6 + 0.02; 
       const floatY = Math.sin(t * 0.8 + phaseOffset) * floatAmp;
       const floatX = Math.cos(t * 0.5 + phaseOffset) * floatAmp * 0.5;
 
-      // Adjust rotation
-      // Align upright in tree mode to show the character clearly, random tumble in scatter
       tempObj.position.set(x + floatX, y + floatY, z);
 
       const tumbleSpeed = THREE.MathUtils.lerp(1.0, 0.1, easeProgress);
       
-      // In Tree Mode (progress -> 1), orient mainly upright to be readable
-      // In Scatter Mode, spin freely
       const targetRotX = 0;
-      const targetRotZ = 0;
-      // We keep Y rotation dynamic to face different directions
-      
       const currentRotX = t * rotationSpeed * tumbleSpeed * 0.5;
-      const currentRotZ = t * rotationSpeed * tumbleSpeed * 0.2;
       
       tempObj.rotation.x = THREE.MathUtils.lerp(currentRotX, targetRotX, easeProgress);
       tempObj.rotation.y = t * rotationSpeed * tumbleSpeed + (easeProgress * Math.PI * 2) + phaseOffset;
-      tempObj.rotation.z = THREE.MathUtils.lerp(currentRotZ, targetRotZ, easeProgress);
+      tempObj.rotation.z = THREE.MathUtils.lerp(t * rotationSpeed * tumbleSpeed * 0.2, 0, easeProgress);
 
-      // Scale pulse
       const pulse = 1.0 + Math.sin(t * 2 + phaseOffset) * 0.05;
       tempObj.scale.setScalar(scale * pulse);
 
@@ -186,7 +161,9 @@ export const Ornaments: React.FC<OrnamentsProps> = ({ count, progress, colorPale
       meshRef.current.setMatrixAt(i, tempObj.matrix);
     }
     
-    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (meshRef.current.instanceMatrix) {
+      meshRef.current.instanceMatrix.needsUpdate = true;
+    }
   });
 
   return (
