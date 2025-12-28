@@ -28,6 +28,7 @@ function App() {
   const [isGestureEnabled, setIsGestureEnabled] = useState<boolean>(false);
   const [isDraggingPhoto, setIsDraggingPhoto] = useState<boolean>(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [activeAxis, setActiveAxis] = useState<'X' | 'Y' | 'Z' | null>(null);
   
   const [viewingRotation, setViewingRotation] = useState(0);
   const isRotating = useRef(false);
@@ -145,6 +146,12 @@ function App() {
     setShowClearConfirm(false);
   };
 
+  const axisInfo = {
+    X: "不再是 “单身 / 已婚” 的二元划分，而是细化为 “主动单身”“被动单身”“稳定恋爱”“婚姻筹备”“已婚适应”“离异调整” 等更贴合现实的状态。",
+    Y: "聚焦 适婚青年的真实情绪波动，对 “个体在当前婚姻阶段下的主观情绪与意愿” 的捕捉。",
+    Z: "“ 20-29 岁适婚青年” 的年龄划分，核心剥离 “年龄 = 必须完成某件事” 的绑架属性。"
+  };
+
   return (
     <div 
       className="relative w-full h-screen text-black overflow-hidden font-['Montserrat']"
@@ -200,6 +207,7 @@ function App() {
                 <span className="text-[9px] font-bold text-black/20 uppercase tracking-tighter italic">Double click to focus</span>
               </div>
             )}
+            
             <button 
               onClick={toggleState}
               className={`px-10 py-4 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all text-xs font-black tracking-[0.3em] uppercase border ${treeState === TreeMorphState.TREE_SHAPE ? 'bg-black text-white border-black' : 'bg-white text-black border-black/10'}`}
@@ -322,19 +330,41 @@ function App() {
       {showSplash && (
         <div className={`absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white transition-all duration-[1200ms] ${isFading ? 'opacity-0 scale-110 blur-xl pointer-events-none' : 'opacity-100 scale-100 blur-0'}`}>
           
-          {/* Axis Labels - Bottom Left of Splash Screen */}
-          <div className="absolute bottom-10 left-10 flex flex-col gap-2.5">
-            {[
-              "X轴 / 婚姻阶段 Marriage stage",
-              "Y轴 / 情感态度 Emotional attitude",
-              "Z轴 / 年龄 Age"
-            ].map((text, i) => (
-              <div key={i} className="bg-white/5 backdrop-blur-sm border border-black/5 px-4 py-2 rounded-md self-start">
-                <span className="text-[10px] font-bold text-black/20 uppercase tracking-[0.2em] leading-none">
-                  {text}
-                </span>
+          {/* Axis Labels & Buttons - Bottom Left of Splash Screen */}
+          <div className="absolute bottom-10 left-10 flex flex-col gap-6 items-start pointer-events-auto">
+            {/* Axis Info Popover */}
+            {activeAxis && (
+              <div className="max-w-xs bg-white/80 backdrop-blur-xl border border-black/5 p-5 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="flex justify-between items-start mb-2">
+                   <span className="text-[10px] font-black text-black/20 uppercase tracking-[0.2em]">{activeAxis}轴说明</span>
+                   <button onClick={(e) => { e.stopPropagation(); setActiveAxis(null); }} className="text-black/20 hover:text-black/50 transition-colors">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                   </button>
+                </div>
+                <p className="text-[11px] font-bold text-black/70 leading-relaxed tracking-wide text-left">
+                  {axisInfo[activeAxis]}
+                </p>
               </div>
-            ))}
+            )}
+
+            {/* Axis Buttons Group */}
+            <div className="flex flex-col gap-2.5">
+              {[
+                { label: "X轴 / 婚姻阶段 Marriage stage", id: 'X' as const },
+                { label: "Y轴 / 情感态度 Emotional attitude", id: 'Y' as const },
+                { label: "Z轴 / 年龄 Age", id: 'Z' as const }
+              ].map((axis) => (
+                <button 
+                  key={axis.id} 
+                  onClick={() => setActiveAxis(activeAxis === axis.id ? null : axis.id)}
+                  className={`group bg-white/5 backdrop-blur-sm border border-black/5 px-4 py-2.5 rounded-md self-start transition-all hover:bg-white/40 active:scale-95 ${activeAxis === axis.id ? 'bg-white/60 border-black/20 scale-105' : ''}`}
+                >
+                  <span className={`text-[10px] font-bold uppercase tracking-[0.2em] leading-none transition-colors ${activeAxis === axis.id ? 'text-black' : 'text-black/20 group-hover:text-black/40'}`}>
+                    {axis.label}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-col items-center max-w-2xl text-center gap-20 px-12">
