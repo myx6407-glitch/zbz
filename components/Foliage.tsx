@@ -22,7 +22,7 @@ const foliageVertexShader = `
     // 基础插值位置
     vec3 currentPos = mix(aScatterPos, aTreePos, t);
 
-    // 爆发效果：在从 1 变到 0 的转场初期（散开动作），增加一个径向推力
+    // 爆发效果
     float explosion = smoothstep(0.8, 0.4, t) * smoothstep(0.0, 0.4, t) * 500.0;
     currentPos += normalize(aScatterPos) * explosion;
 
@@ -34,20 +34,20 @@ const foliageVertexShader = `
 
     vec4 mvPosition = modelViewMatrix * vec4(currentPos, 1.0);
     
-    // 散开时增加 30% 大小
+    // 散开时大小调整
     float sizeMultiplier = mix(1.3, 1.0, t);
     gl_PointSize = (aSize * 1.25 * sizeMultiplier) * (350.0 / -mvPosition.z);
 
-    // 颜色配置
-    vec3 colRed = vec3(1.0, 0.2, 0.3);
-    vec3 colYellow = vec3(0.8, 0.64, 0.08); // 深金色
-    vec3 colBlue = vec3(0.1, 0.5, 1.0);
+    // 颜色重定义
+    vec3 colPink = vec3(1.0, 0.5, 0.7);   // X轴 - 粉色
+    vec3 colBlue = vec3(0.1, 0.6, 1.0);   // Y轴 - 蓝色
+    vec3 colYellow = vec3(0.95, 0.75, 0.1); // Z轴 - 黄色
 
-    vec3 baseColor = colRed;
+    vec3 baseColor = colPink;
     if (aColorIndex > 1.5) {
-        baseColor = colBlue;
+        baseColor = colYellow; // Z
     } else if (aColorIndex > 0.5) {
-        baseColor = colYellow;
+        baseColor = colBlue;   // Y
     }
 
     // 爆发时的亮度提升
@@ -95,6 +95,7 @@ export const Foliage: React.FC<FoliageProps> = ({ count = 15000, progress }) => 
 
     for (let i = 0; i < count; i++) {
       const axis = Math.floor(Math.random() * 3);
+      // 这里的 axis: 0=X, 1=Y, 2=Z
       const treeP = getCrossPosition(4000, 6, 1.0, axis);
       pos[i * 3] = treeP[0];
       pos[i * 3 + 1] = treeP[1];
@@ -108,9 +109,8 @@ export const Foliage: React.FC<FoliageProps> = ({ count = 15000, progress }) => 
       ph[i] = Math.random() * Math.PI * 2;
       sz[i] = Math.random() * 12 + 8; 
       
-      if (axis === 0) ci[i] = 2.0; // X -> Blue
-      else if (axis === 1) ci[i] = 1.0; // Y -> Yellow
-      else ci[i] = 0.0; // Z -> Red
+      // 传递对应的颜色索引
+      ci[i] = axis * 1.0; 
     }
 
     return { positions: pos, scatterPositions: scat, phases: ph, sizes: sz, colorIndices: ci };

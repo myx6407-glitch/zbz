@@ -6,9 +6,14 @@ import { useTexture as useDreiTexture } from '@react-three/drei';
 import { DualPosition } from '../types';
 import { getOffAxisPosition, getSpherePosition } from '../utils/math';
 
+const FIXED_COORDINATES: [number, number, number][] = [
+  [1800, 0, 0], [1080, 0, 0], [360, 0, 0], [-360, 0, 0], [-1080, 0, 0], [-1800, 0, 0],
+  [0, 0, 1800], [0, 0, 1080], [0, 0, 360], [0, 0, -360], [0, 0, -1080], [0, 0, -1800]
+];
+
 interface PhotoOrnamentsProps {
   images: string[];
-  progress: number; // 0 to 1
+  progress: number;
   globalScale?: number;
   onPhotoClick: (url: string) => void;
   onDragStateChange: (isDragging: boolean) => void;
@@ -19,12 +24,22 @@ interface PhotoItemProps {
   data: DualPosition;
   progress: number;
   globalScale: number;
+  isDraggable: boolean;
   onClick: (url: string) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
 }
 
-const PhotoItem: React.FC<PhotoItemProps> = ({ url, data, progress, globalScale, onClick, onDragStart, onDragEnd }) => {
+const PhotoItem: React.FC<PhotoItemProps> = ({ 
+  url, 
+  data, 
+  progress, 
+  globalScale, 
+  isDraggable,
+  onClick, 
+  onDragStart, 
+  onDragEnd 
+}) => {
   const texture = useDreiTexture(url);
   const meshRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
@@ -38,12 +53,14 @@ const PhotoItem: React.FC<PhotoItemProps> = ({ url, data, progress, globalScale,
   const targetPos = useMemo(() => new THREE.Vector3(), []);
 
   useMemo(() => {
-    texture.colorSpace = THREE.SRGBColorSpace;
+    if (texture) {
+      texture.colorSpace = THREE.SRGBColorSpace;
+    }
   }, [texture]);
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    if (!meshRef.current) return;
+    if (!isDraggable || !meshRef.current) return;
     
     const worldPos = new THREE.Vector3();
     meshRef.current.getWorldPosition(worldPos);
@@ -115,7 +132,7 @@ const PhotoItem: React.FC<PhotoItemProps> = ({ url, data, progress, globalScale,
     const targetScaleValue = scale * pulse * globalScale * feedbackScale; 
     meshRef.current.scale.setScalar(THREE.MathUtils.lerp(meshRef.current.scale.x, targetScaleValue, 0.15));
     
-    if (meshRef.current.material instanceof THREE.MeshStandardMaterial) {
+    if (meshRef.current.material instanceof THREE.MeshBasicMaterial) {
         meshRef.current.material.opacity = THREE.MathUtils.lerp(meshRef.current.material.opacity, isDragging ? 1 : 0.9, 0.1);
     }
   });
@@ -131,37 +148,49 @@ const PhotoItem: React.FC<PhotoItemProps> = ({ url, data, progress, globalScale,
       onPointerOut={() => setHovered(false)}
     >
       <planeGeometry args={[1, 1]} />
-      <meshStandardMaterial 
+      {/* 调整 color 为 [1.15, 1.15, 1.15] 实现亮度增加 15% */}
+      <meshBasicMaterial 
         map={texture} 
         side={THREE.DoubleSide} 
         transparent 
-        roughness={0.4}
-        metalness={0.1}
-        emissive={'#000000'}
-        emissiveIntensity={0}
+        color={[1.15, 1.15, 1.15]}
+        toneMapped={false}
       />
     </mesh>
   );
 };
 
 export const PhotoOrnaments: React.FC<PhotoOrnamentsProps> = ({ images, progress, globalScale = 1.0, onPhotoClick, onDragStateChange }) => {
-  const [photoData, setPhotoData] = useState<{url: string, data: DualPosition}[]>([]);
+  const [photoData, setPhotoData] = useState<{url: string, isFixed: boolean, data: DualPosition}[]>([]);
 
   useEffect(() => {
     setPhotoData(prev => {
       const existingUrls = prev.map(p => p.url);
       const newImages = images.filter(url => !existingUrls.includes(url));
-      const newItems = newImages.map(url => ({
-        url,
-        data: {
-          tree: getOffAxisPosition(2200, 350),
-          scatter: getSpherePosition(4500),
-          rotationSpeed: 0,
-          phaseOffset: Math.random() * Math.PI * 2,
-          scale: 110,
-        }
-      }));
-      return [...prev.filter(p => images.includes(p.url)), ...newItems];
+      
+      const newItems = newImages.map((url, index) => {
+        const globalIndex = prev.length + index;
+        
+        const isFixed = globalIndex < FIXED_COORDINATES.length;
+        const treePos = isFixed 
+          ? [...FIXED_COORDINATES[globalIndex]] as [number, number, number]
+          : getOffAxisPosition(2500, 450); 
+
+        return {
+          url,
+          isFixed,
+          data: {
+            tree: treePos,
+            scatter: getSpherePosition(4500),
+            rotationSpeed: 0,
+            phaseOffset: Math.random() * Math.PI * 2,
+            scale: isFixed ? 70 : 140, 
+          }
+        };
+      });
+
+      const filteredPrev = prev.filter(p => images.includes(p.url));
+      return [...filteredPrev, ...newItems];
     });
   }, [images]);
 
@@ -172,6 +201,7 @@ export const PhotoOrnaments: React.FC<PhotoOrnamentsProps> = ({ images, progress
           key={`${item.url}-${index}`}
           url={item.url} 
           data={item.data} 
+          isDraggable={!item.isFixed}
           progress={progress} 
           globalScale={globalScale}
           onClick={onPhotoClick}

@@ -1,4 +1,3 @@
-
 import React, { useState, Suspense, useRef, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Loader } from '@react-three/drei';
@@ -123,6 +122,25 @@ function App() {
     setViewingRotation(0);
   };
 
+  const handleDeletePhoto = (url: string) => {
+    const idx = userImages.indexOf(url);
+    if (idx === -1) return;
+    
+    const newImages = userImages.filter(img => img !== url);
+    setUserImages(newImages);
+    
+    if (newImages.length === 0) {
+      setViewingImage(null);
+      setCurrentIndex(0);
+    } else {
+      // 自动导航到新的位置
+      const nextIdx = idx >= newImages.length ? newImages.length - 1 : idx;
+      setCurrentIndex(nextIdx);
+      setViewingImage(newImages[nextIdx]);
+      setViewingRotation(0);
+    }
+  };
+
   const handleViewPointerDown = (e: React.PointerEvent) => {
     isRotating.current = true;
     startX.current = e.clientX;
@@ -146,10 +164,11 @@ function App() {
     setShowClearConfirm(false);
   };
 
+  // 坐标轴详细说明
   const axisInfo = {
-    X: "不再是 “单身 / 已婚” 的二元划分，而是细化为 “主动单身”“被动单身”“稳定恋爱”“婚姻筹备”“已婚适应”“离异调整” 等更贴合现实的状态。",
-    Y: "聚焦 适婚青年的真实情绪波动，对 “个体在当前婚姻阶段下的主观情绪与意愿” 的捕捉。",
-    Z: "“ 20-29 岁适婚青年” 的年龄划分，核心剥离 “年龄 = 必须完成某件事” 的绑架属性。"
+    X: "聚焦 适婚青年的真实情绪波动，对 “个体在当前婚姻阶段下的主观情绪与意愿” 的捕捉。",
+    Y: "不再是 “单身 / 已婚” 的二元划分，而是细化为 “主动单身”“被动单身”“稳定恋爱”“婚姻筹备”“已婚适应”“离异调整” 等更贴合现实的状态。",
+    Z: "“ 20-29 岁适婚青年” 的年龄划分，作为垂直主轴贯穿始终，剥离 “年龄 = 必须完成某件事” 的绑架属性。"
   };
 
   return (
@@ -173,7 +192,7 @@ function App() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
               </button>
               <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center w-12 h-12 bg-white/40 backdrop-blur-md border border-black/5 rounded-full hover:bg-black hover:text-white hover:scale-110 active:scale-95 transition-all duration-500 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
               </button>
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple accept="image/*" className="hidden" />
             </div>
@@ -311,12 +330,30 @@ function App() {
             <img 
               src={viewingImage} 
               alt="Viewing" 
-              className="max-w-full max-h-[80vh] object-contain" 
+              className="max-w-full max-h-[80vh] object-contain shadow-2xl rounded-sm" 
               draggable={false}
+              style={{ filter: 'brightness(1.15)' }}
             />
             
-            <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 flex justify-center w-full" style={{ transform: 'translateZ(50px)' }}>
-               <button onClick={() => setViewingImage(null)} className="px-10 py-3 bg-black text-white border border-white/10 rounded-full text-[11px] font-black tracking-widest uppercase hover:scale-105 transition-all shadow-xl">关闭 / CLOSE</button>
+            <div className="absolute -bottom-24 left-1/2 -translate-x-1/2 flex items-center justify-center gap-4 w-full" style={{ transform: 'translateZ(50px)' }}>
+               <button 
+                onClick={() => setViewingImage(null)} 
+                className="px-10 py-3 bg-black text-white border border-white/10 rounded-full text-[11px] font-black tracking-widest uppercase hover:scale-105 active:scale-95 transition-all shadow-xl"
+               >
+                 关闭 / CLOSE
+               </button>
+               
+               <button 
+                onClick={(e) => { e.stopPropagation(); handleDeletePhoto(viewingImage); }} 
+                className="group flex items-center gap-2 px-8 py-3 bg-white/40 backdrop-blur-md text-black/60 border border-black/5 rounded-full text-[11px] font-black tracking-widest uppercase hover:bg-red-600 hover:text-white hover:border-red-600 hover:scale-105 active:scale-95 transition-all shadow-lg"
+               >
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:rotate-12">
+                   <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                   <line x1="10" y1="11" x2="10" y2="17"></line>
+                   <line x1="14" y1="11" x2="14" y2="17"></line>
+                 </svg>
+                 删除 / REMOVE
+               </button>
             </div>
           </div>
 
@@ -352,7 +389,7 @@ function App() {
               {[
                 { label: "X轴 / 婚姻阶段 Marriage stage", id: 'X' as const },
                 { label: "Y轴 / 情感态度 Emotional attitude", id: 'Y' as const },
-                { label: "Z轴 / 年龄 Age", id: 'Z' as const }
+                { label: "Z轴 / 年龄 Age (垂直)", id: 'Z' as const }
               ].map((axis) => (
                 <button 
                   key={axis.id} 

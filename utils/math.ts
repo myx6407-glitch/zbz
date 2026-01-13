@@ -49,6 +49,10 @@ export const getOffAxisPosition = (radius: number, axisThreshold: number): [numb
 
 /**
  * Generates a point on a 3D Cross Structure (X, Y, Z axes)
+ * 重构说明：
+ * axis 0 (Logic X): 对应水平 X 轴 (Pink)
+ * axis 1 (Logic Y): 对应深度 Z 轴 (Blue)
+ * axis 2 (Logic Z): 对应垂直 Y 轴 (Yellow) - 满足用户“Z轴为竖直轴”的要求
  */
 export const getCrossPosition = (
   armLength: number,
@@ -56,13 +60,9 @@ export const getCrossPosition = (
   randomness: number = 0,
   specificAxis?: number
 ): [number, number, number] => {
-  // Select an axis: 0=X, 1=Y, 2=Z
   const axis = specificAxis !== undefined ? specificAxis : Math.floor(Math.random() * 3);
   
-  // Position along the main axis (long bar)
   const longPos = (Math.random() - 0.5) * armLength;
-  
-  // Position perpendicular (thickness)
   const angle = Math.random() * Math.PI * 2;
   const radius = Math.sqrt(Math.random()) * thickness;
   const t1 = Math.cos(angle) * radius;
@@ -70,21 +70,20 @@ export const getCrossPosition = (
 
   let x = 0, y = 0, z = 0;
 
-  if (axis === 0) { // X-Axis Bar
+  if (axis === 0) { // Logic X -> Three.js X (Pink)
     x = longPos;
     y = t1;
     z = t2;
-  } else if (axis === 1) { // Y-Axis Bar
-    x = t1;
-    y = longPos;
-    z = t2;
-  } else { // Z-Axis Bar
+  } else if (axis === 1) { // Logic Y -> Three.js Z (Blue)
     x = t1;
     y = t2;
     z = longPos;
+  } else { // Logic Z -> Three.js Y (Yellow - Vertical)
+    x = t1;
+    y = longPos;
+    z = t2;
   }
 
-  // Apply slight noise
   const noiseX = (Math.random() - 0.5) * randomness;
   const noiseY = (Math.random() - 0.5) * randomness;
   const noiseZ = (Math.random() - 0.5) * randomness;

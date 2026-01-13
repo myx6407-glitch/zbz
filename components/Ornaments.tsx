@@ -7,12 +7,11 @@ import { getCrossPosition, getSpherePosition } from '../utils/math';
 
 interface OrnamentsProps {
   count: number;
-  type?: OrnamentType; // kept for compatibility but ignored
-  progress: number; // 0 to 1
+  type?: OrnamentType; 
+  progress: number; 
   colorPalette: string[];
 }
 
-// Helper to build a single box's geometry data
 const addBox = (
   positions: number[],
   normals: number[],
@@ -82,10 +81,9 @@ export const Ornaments: React.FC<OrnamentsProps> = ({ count, progress, colorPale
   const geometry = useMemo(() => createRenGeometry(), []);
 
   const material = useMemo(() => {
-    return new THREE.MeshStandardMaterial({
-      roughness: 0.3,
-      metalness: 0.6,
-      envMapIntensity: 1.5,
+    return new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0.9
     });
   }, []);
 
@@ -119,7 +117,6 @@ export const Ornaments: React.FC<OrnamentsProps> = ({ count, progress, colorPale
       for (let i = 0; i < count; i++) {
         meshRef.current.setColorAt(i, new THREE.Color(data.colors[i * 3], data.colors[i * 3 + 1], data.colors[i * 3 + 2]));
       }
-      // instanceColor is created lazily by Three.js inside setColorAt if not present
       if (meshRef.current.instanceColor) {
         meshRef.current.instanceColor.needsUpdate = true;
       }
@@ -170,8 +167,6 @@ export const Ornaments: React.FC<OrnamentsProps> = ({ count, progress, colorPale
     <instancedMesh
       ref={meshRef}
       args={[geometry, material, count]}
-      castShadow
-      receiveShadow
     />
   );
 };
