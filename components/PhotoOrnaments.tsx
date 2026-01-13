@@ -1,4 +1,3 @@
-
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree, ThreeEvent } from '@react-three/fiber';
@@ -59,7 +58,9 @@ const PhotoItem: React.FC<PhotoItemProps> = ({
   }, [texture]);
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    // 关键修复：始终停止冒泡，防止点击照片时触发场景旋转
     e.stopPropagation();
+    
     if (!isDraggable || !meshRef.current) return;
     
     const worldPos = new THREE.Vector3();
@@ -148,7 +149,6 @@ const PhotoItem: React.FC<PhotoItemProps> = ({
       onPointerOut={() => setHovered(false)}
     >
       <planeGeometry args={[1, 1]} />
-      {/* 调整 color 为 [1.15, 1.15, 1.15] 实现亮度增加 15% */}
       <meshBasicMaterial 
         map={texture} 
         side={THREE.DoubleSide} 

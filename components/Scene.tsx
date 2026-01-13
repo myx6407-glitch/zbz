@@ -1,4 +1,3 @@
-
 import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { PerspectiveCamera, OrbitControls } from '@react-three/drei';
@@ -43,10 +42,10 @@ export const Scene: React.FC<SceneProps> = ({
 
   const handlePointerDown = (e: any) => {
     if (isDraggingPhoto) return;
+    // 只有当没有点击到照片时（通过事件冒泡控制），才触发场景旋转
     isDraggingScene.current = true;
     lastMouseX.current = e.clientX;
     angularVelocity.current = 0; 
-    e.stopPropagation(); 
   };
 
   const handlePointerUp = () => {
@@ -112,15 +111,17 @@ export const Scene: React.FC<SceneProps> = ({
         makeDefault
       />
 
+      {/* 背景交互面：放置在更深的位置并降低渲染顺序，防止遮挡位于原点附近的坐标轴照片 */}
       <mesh 
-        position={[0, 0, 0]} 
-        visible={false} 
+        position={[0, 0, -2000]} 
+        renderOrder={-10}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         onPointerMove={handlePointerMove}
       >
-        <planeGeometry args={[15000, 15000]} />
+        <planeGeometry args={[20000, 20000]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
 
       <group ref={groupRef} position={[0, 0, 0]}>
