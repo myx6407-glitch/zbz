@@ -1,4 +1,3 @@
-
 import React, { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -37,7 +36,7 @@ const dustVertexShader = `
     gl_PointSize = aSize * (1000.0 / -mvPosition.z);
     gl_Position = projectionMatrix * mvPosition;
 
-    vAlpha = 0.4 + 0.2 * sin(uTime * 2.0 + aPhase); // Lower alpha for white BG
+    vAlpha = 0.4 + 0.2 * sin(uTime * 2.0 + aPhase); 
   }
 `;
 
@@ -52,7 +51,6 @@ const dustFragmentShader = `
     float strength = 1.0 - (dist * 2.0);
     strength = pow(strength, 2.0);
     
-    // Charcoal / Ink color for white background
     vec3 dustColor = vec3(0.2, 0.2, 0.25); 
     
     gl_FragColor = vec4(dustColor, strength * vAlpha);
@@ -95,14 +93,16 @@ export const GoldDust = () => {
 
   useFrame((state) => {
     if (!meshRef.current) return;
-    // Fixed: cast material to ShaderMaterial to access uniforms property
     const material = meshRef.current.material as THREE.ShaderMaterial;
     material.uniforms.uTime.value = state.clock.elapsedTime;
+    
     mousePlane.current.normal.copy(camera.position).normalize();
     raycaster.current.setFromCamera(state.pointer, camera);
+    
     const target = new THREE.Vector3();
-    raycaster.current.ray.intersectPlane(mousePlane.current, target);
-    if (target) {
+    const result = raycaster.current.ray.intersectPlane(mousePlane.current, target);
+    
+    if (result) {
         mousePos3D.current.lerp(target, 0.1);
         material.uniforms.uMouse.value.copy(mousePos3D.current);
         material.uniforms.uHover.value = 1.0;

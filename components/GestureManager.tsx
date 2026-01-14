@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { TreeMorphState } from '../types';
 
@@ -11,16 +10,12 @@ interface GestureManagerProps {
   statusText?: string;
 }
 
-declare const Hands: any;
-declare const Camera: any;
-
 export const GestureManager: React.FC<GestureManagerProps> = ({ 
   onStateChange, 
   onGestureAction,
   active, 
   handXRef, 
   isHandActiveRef,
-  statusText: appStatusText
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,6 +26,7 @@ export const GestureManager: React.FC<GestureManagerProps> = ({
   const isDestroyedRef = useRef(false);
   
   const getDistance = (p1: any, p2: any) => {
+    if (!p1 || !p2) return 0;
     return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
   };
 
@@ -61,57 +57,53 @@ export const GestureManager: React.FC<GestureManagerProps> = ({
           isHandActiveRef.current = true;
           
           const landmarks = results.multiHandLandmarks[0];
-          const handedness = results.multiHandedness[0];
+          const handedness = results.multiHandedness ? results.multiHandedness[0] : { label: 'Unknown' };
           
-          handXRef.current = landmarks[0].x;
+          if (landmarks && landmarks[0]) {
+            handXRef.current = landmarks[0].x;
 
-          ctx.globalAlpha = 0.8;
-          landmarks.forEach((point: any) => {
-            ctx.beginPath();
-            ctx.arc(point.x * canvas.width, point.y * canvas.height, 2, 0, Math.PI * 2);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-          });
+            ctx.globalAlpha = 0.8;
+            landmarks.forEach((point: any) => {
+              ctx.beginPath();
+              ctx.arc(point.x * canvas.width, point.y * canvas.height, 2, 0, Math.PI * 2);
+              ctx.fillStyle = '#ffffff';
+              ctx.fill();
+            });
 
-          const handLabel = handedness.label === 'Left' ? '右手' : '左手';
-          let statusPrefix = `检测到${handLabel}`;
+            const handLabel = handedness.label === 'Left' ? '右手' : '左手';
+            let statusPrefix = `检测到${handLabel}`;
 
-          const wrist = landmarks[0];
-          const palmCenter = landmarks[9]; 
-          const refDist = getDistance(wrist, palmCenter);
+            const wrist = landmarks[0];
+            const palmCenter = landmarks[9]; 
+            if (wrist && palmCenter) {
+              const refDist = getDistance(wrist, palmCenter);
+              const tips = [4, 8, 12, 16, 20];
+              const extended = tips.map(tip => landmarks[tip] ? getDistance(landmarks[tip], wrist) > refDist * 1.65 : false);
+              const extendedCount = extended.filter(v => v).length;
 
-          // 手指索引: 0拇指, 1食指, 2中指, 3无名指, 4小指
-          const tips = [4, 8, 12, 16, 20];
-          const extended = tips.map(tip => getDistance(landmarks[tip], wrist) > refDist * 1.65);
-          const extendedCount = extended.filter(v => v).length;
-
-          // 核心逻辑判断
-          // 1. "1" 手势: 仅食指 (VIEW)
-          if (extendedCount === 1 && extended[1]) {
-            setLocalStatus(`${statusPrefix}: 预览照片`);
-            onGestureAction('VIEW');
-          }
-          // 2. “比耶”/“2”手势: 食指、中指伸出，其余收起 (NEXT)
-          else if (extendedCount === 2 && extended[1] && extended[2] && !extended[0] && !extended[3] && !extended[4]) {
-            setLocalStatus(`${statusPrefix}: 下一张`);
-            onGestureAction('NEXT');
-          }
-          // 3. “3”手势: 中指、无名指、小拇指伸出，其余收起 (CLOSE)
-          else if (extendedCount === 3 && extended[2] && extended[3] && extended[4] && !extended[1] && !extended[0]) {
-            setLocalStatus(`${statusPrefix}: 关闭预览`);
-            onGestureAction('CLOSE');
-          }
-          // 4. 全开: 切换形态 (AXIS)
-          else if (extendedCount >= 4) {
-            setLocalStatus(`${statusPrefix}: 坐标轴模式`);
-            onStateChange(TreeMorphState.TREE_SHAPE);
-          }
-          // 5. 握拳: 切换形态 (SCATTER)
-          else if (extendedCount === 0) {
-            setLocalStatus(`${statusPrefix}: 散开模式`);
-            onStateChange(TreeMorphState.SCATTERED);
-          } else {
-            setLocalStatus(statusPrefix);
+              if (extendedCount === 1 && extended[1]) {
+                setLocalStatus(`${statusPrefix}: 预览照片`);
+                onGestureAction('VIEW');
+              }
+              else if (extendedCount === 2 && extended[1] && extended[2] && !extended[0] && !extended[3] && !extended[4]) {
+                setLocalStatus(`${statusPrefix}: 下一张`);
+                onGestureAction('NEXT');
+              }
+              else if (extendedCount === 3 && extended[2] && extended[3] && extended[4] && !extended[1] && !extended[0]) {
+                setLocalStatus(`${statusPrefix}: 关闭预览`);
+                onGestureAction('CLOSE');
+              }
+              else if (extendedCount >= 4) {
+                setLocalStatus(`${statusPrefix}: 坐标轴模式`);
+                onStateChange(TreeMorphState.TREE_SHAPE);
+              }
+              else if (extendedCount === 0) {
+                setLocalStatus(`${statusPrefix}: 散开模式`);
+                onStateChange(TreeMorphState.SCATTERED);
+              } else {
+                setLocalStatus(statusPrefix);
+              }
+            }
           }
         } else {
           isHandActiveRef.current = false;
@@ -120,17 +112,20 @@ export const GestureManager: React.FC<GestureManagerProps> = ({
       }
     };
 
-    const HandsClass = (window as any).Hands || (typeof Hands !== 'undefined' ? Hands : null);
-    const CameraClass = (window as any).Camera || (typeof Camera !== 'undefined' ? Camera : null);
+    const HandsClass = (window as any).Hands;
+    const CameraClass = (window as any).Camera;
 
-    if (!HandsClass) {
-      setLocalStatus('引擎未加载');
+    if (!HandsClass || !CameraClass) {
+      setLocalStatus('引擎未就绪');
       return;
     }
 
     try {
       const hands = new HandsClass({
-        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
+        locateFile: (file: string) => {
+          // 关键：确保 locateFile 返回正确的 CDN 资源路径，防止 internal data 加载错误
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+        }
       });
 
       hands.setOptions({
@@ -149,9 +144,14 @@ export const GestureManager: React.FC<GestureManagerProps> = ({
             if (isDestroyedRef.current || !handsRef.current || !videoRef.current) return;
             if (videoRef.current.readyState >= 2) {
               try {
-                await handsRef.current.send({ image: videoRef.current });
+                // 加倍防御，确保 handsRef.current 依然存在
+                if (handsRef.current) {
+                    await handsRef.current.send({ image: videoRef.current });
+                }
                 if (!isModelLoaded) setIsModelLoaded(true);
-              } catch (e) {}
+              } catch (e) {
+                console.error("Frame send error:", e);
+              }
             }
           },
           width: 320,
@@ -160,18 +160,21 @@ export const GestureManager: React.FC<GestureManagerProps> = ({
         cameraRef.current.start();
       }
     } catch (err) {
-      console.error("Init Error:", err);
+      console.error("Gesture Init Error:", err);
+      setLocalStatus('启动失败');
     }
 
     return () => {
       isDestroyedRef.current = true;
-      if (cameraRef.current) cameraRef.current.stop();
+      if (cameraRef.current) {
+        try { cameraRef.current.stop(); } catch(e) {}
+      }
       if (handsRef.current) {
         try { handsRef.current.close(); } catch(e) {}
         handsRef.current = null;
       }
     };
-  }, [active, onStateChange, onGestureAction]);
+  }, [active, onStateChange, onGestureAction, handXRef, isHandActiveRef]);
 
   if (!active) return null;
 

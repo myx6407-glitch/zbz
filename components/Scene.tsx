@@ -41,8 +41,8 @@ export const Scene: React.FC<SceneProps> = ({
   const INITIAL_DISTANCE = Math.sqrt(INITIAL_CAMERA_POS[1] ** 2 + INITIAL_CAMERA_POS[2] ** 2);
 
   const handlePointerDown = (e: any) => {
-    if (isDraggingPhoto) return;
-    // 只有当没有点击到照片时（通过事件冒泡控制），才触发场景旋转
+    // 只有当未点击到任何 3D 对象（由 R3F 事件冒泡机制判定）时才触发场景拖拽
+    if (e.defaultPrevented || isDraggingPhoto) return;
     isDraggingScene.current = true;
     lastMouseX.current = e.clientX;
     angularVelocity.current = 0; 
@@ -96,7 +96,7 @@ export const Scene: React.FC<SceneProps> = ({
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={INITIAL_CAMERA_POS} fov={45} far={15000} />
+      <PerspectiveCamera makeDefault position={INITIAL_CAMERA_POS} fov={45} far={20000} />
       
       <OrbitControls 
         enabled={!isDraggingPhoto && !isHandActiveRef.current} 
@@ -106,21 +106,25 @@ export const Scene: React.FC<SceneProps> = ({
         target={[0, 0, 0]}
         minPolarAngle={Math.PI / 4} 
         maxPolarAngle={Math.PI / 1.6}
-        minDistance={1000}
-        maxDistance={INITIAL_DISTANCE}
+        minDistance={800}
+        maxDistance={INITIAL_DISTANCE + 1000}
         makeDefault
       />
 
-      {/* 背景交互面：放置在更深的位置并降低渲染顺序，防止遮挡位于原点附近的坐标轴照片 */}
+      {/* 
+        背景交互面：
+        1. 放置在极远距离 (-10000)
+        2. renderOrder 设为负数确保在最后渲染/最先判定点击时被 3D 对象阻挡
+      */}
       <mesh 
-        position={[0, 0, -2000]} 
-        renderOrder={-10}
+        position={[0, 0, -10000]} 
+        renderOrder={-100}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         onPointerMove={handlePointerMove}
       >
-        <planeGeometry args={[20000, 20000]} />
+        <planeGeometry args={[50000, 50000]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
 

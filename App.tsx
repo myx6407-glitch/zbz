@@ -11,7 +11,7 @@ const Logo: React.FC = () => (
       <img 
         src="https://file.uhsea.com/2512/c6ecfe403a3e29fa1d2afc9c8ead0238ZV.png" 
         alt="人生坐标" 
-        className="h-20 md:h-28 w-auto object-contain filter"
+        className="h-16 md:h-24 w-auto object-contain filter"
       />
     </div>
   </div>
@@ -112,28 +112,15 @@ function App() {
     });
   };
 
-  const navigatePhoto = (direction: 'prev' | 'next') => {
-    if (userImages.length === 0) return;
-    let newIdx = direction === 'next' 
-      ? (currentIndex + 1) % userImages.length 
-      : (currentIndex - 1 + userImages.length) % userImages.length;
-    setCurrentIndex(newIdx);
-    setViewingImage(userImages[newIdx]);
-    setViewingRotation(0);
-  };
-
   const handleDeletePhoto = (url: string) => {
     const idx = userImages.indexOf(url);
     if (idx === -1) return;
-    
     const newImages = userImages.filter(img => img !== url);
     setUserImages(newImages);
-    
     if (newImages.length === 0) {
       setViewingImage(null);
       setCurrentIndex(0);
     } else {
-      // 自动导航到新的位置
       const nextIdx = idx >= newImages.length ? newImages.length - 1 : idx;
       setCurrentIndex(nextIdx);
       setViewingImage(newImages[nextIdx]);
@@ -159,12 +146,6 @@ function App() {
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
-  const clearAllPhotos = () => {
-    setUserImages([]);
-    setShowClearConfirm(false);
-  };
-
-  // 坐标轴详细说明
   const axisInfo = {
     X: "聚焦 适婚青年的真实情绪波动，对 “个体在当前婚姻阶段下的主观情绪与意愿” 的捕捉。",
     Y: "不再是 “单身 / 已婚” 的二元划分，而是细化为 “主动单身”“被动单身”“稳定恋爱”“婚姻筹备”“已婚适应”“离异调整” 等更贴合现实的状态。",
@@ -173,17 +154,18 @@ function App() {
 
   return (
     <div 
-      className="relative w-full h-screen text-black overflow-hidden font-['Montserrat']"
+      className="relative w-full h-screen text-black overflow-hidden font-['Montserrat'] bg-white"
       style={{
-        backgroundImage: "url('https://file.uhsea.com/2512/c561d2074eb963ef1ab0c38efbca7a84ZR.png')",
+        backgroundImage: "url('https://file.uhsea.com/2601/f27857bd6919525595bb2ead17ad7d580I.png')",
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat'
       }}
     >
       
-      {/* Main UI Layer */}
-      <div className={`absolute inset-0 z-10 pointer-events-none p-6 flex flex-col justify-between transition-opacity duration-1000 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
+      {/* Main UI Layer - Shrinks and fades when viewing image */}
+      <div className={`absolute inset-0 z-10 pointer-events-none p-6 flex flex-col justify-between transition-all duration-1000 ${showSplash || viewingImage ? 'opacity-0 scale-90 pointer-events-none translate-y-4' : 'opacity-100 scale-100'}`}>
+        
         <div className="flex justify-between items-start">
           <div className="flex flex-col gap-4 items-start pointer-events-auto">
             <Logo />
@@ -256,7 +238,7 @@ function App() {
               </div>
               <div className="flex flex-col w-full gap-3">
                 <button 
-                  onClick={clearAllPhotos} 
+                  onClick={() => { setUserImages([]); setShowClearConfirm(false); }} 
                   className="w-full py-5 bg-black text-white rounded-xl text-[11px] font-black tracking-[0.4em] uppercase hover:bg-neutral-800 transition-all active:scale-95"
                 >
                   确认 / CONFIRM
@@ -272,8 +254,8 @@ function App() {
         </div>
       )}
 
-      {/* Canvas Layer */}
-      <div className={`absolute inset-0 z-0 transition-opacity duration-[2000ms] ${showSplash ? 'opacity-0 scale-95 blur-md' : 'opacity-100 scale-100 blur-0'}`}>
+      {/* Canvas Layer - Gathers/Shrinks away when viewing an image - All blurs removed */}
+      <div className={`absolute inset-0 z-0 transition-all duration-1000 ${showSplash ? 'opacity-0 scale-95 blur-none' : (viewingImage ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100 blur-0')}`}>
         <Suspense fallback={null}>
           <Canvas shadows gl={{ alpha: true }}>
             <Scene 
@@ -295,81 +277,60 @@ function App() {
         </Suspense>
       </div>
 
-      {/* Photo Viewer */}
+      {/* Photo Viewer - Clean integration, direct background display with no "box" effects */}
       {viewingImage && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none animate-in fade-in duration-500 overflow-hidden" style={{ perspective: '1200px' }}>
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none animate-in fade-in duration-700 overflow-hidden" style={{ perspective: '1200px' }}>
+          {/* Transparent interaction layer */}
           <div className="absolute inset-0 cursor-zoom-out pointer-events-auto" onClick={() => setViewingImage(null)} />
           
-          <button 
-            className="absolute left-8 z-[60] p-6 text-black/30 hover:text-black hover:scale-125 transition-all pointer-events-auto hidden md:block"
-            onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }}
-          >
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          </button>
-
-          <button 
-            className="absolute right-8 z-[60] p-6 text-black/30 hover:text-black hover:scale-125 transition-all pointer-events-auto hidden md:block"
-            onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }}
-          >
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-
-          <div 
-            className="relative group max-w-[90vw] max-h-[90vh] pointer-events-auto animate-in zoom-in-95 duration-500 touch-none select-none cursor-grab active:cursor-grabbing" 
-            onClick={e => e.stopPropagation()}
-            onPointerDown={handleViewPointerDown}
-            onPointerMove={handleViewPointerMove}
-            onPointerUp={handleViewPointerUp}
-            onPointerCancel={handleViewPointerUp}
-            style={{ 
-              transform: `rotateY(${viewingRotation}deg)`,
-              transformStyle: 'preserve-3d',
-              transition: isRotating.current ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)'
-            }}
-          >
-            <img 
-              src={viewingImage} 
-              alt="Viewing" 
-              className="max-w-full max-h-[80vh] object-contain shadow-2xl rounded-sm" 
-              draggable={false}
-              style={{ filter: 'brightness(1.15)' }}
-            />
+          <div className="flex flex-col items-center justify-center gap-6 max-w-[90vw] max-h-[95vh] pointer-events-none">
             
-            <div className="absolute -bottom-24 left-1/2 -translate-x-1/2 flex items-center justify-center gap-4 w-full" style={{ transform: 'translateZ(50px)' }}>
+            {/* The Image - No border, no shadow, no rounded corners for seamless blending */}
+            <div 
+              className="relative group pointer-events-auto animate-in zoom-in-95 duration-700 touch-none select-none cursor-grab active:cursor-grabbing" 
+              onClick={e => e.stopPropagation()}
+              onPointerDown={handleViewPointerDown}
+              onPointerMove={handleViewPointerMove}
+              onPointerUp={handleViewPointerUp}
+              onPointerCancel={handleViewPointerUp}
+              style={{ 
+                transform: `rotateY(${viewingRotation}deg)`,
+                transformStyle: 'preserve-3d',
+                transition: isRotating.current ? 'none' : 'transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)'
+              }}
+            >
+              <img 
+                src={viewingImage} 
+                alt="Viewing" 
+                className="max-h-[70vh] md:max-h-[80vh] w-auto object-contain" 
+                draggable={false}
+              />
+            </div>
+            
+            {/* Minimal Capsule Buttons - Half size (scale-50) */}
+            <div className="flex items-center justify-center gap-3 pointer-events-auto scale-50 transform-gpu origin-center">
                <button 
                 onClick={() => setViewingImage(null)} 
-                className="px-10 py-3 bg-black text-white border border-white/10 rounded-full text-[11px] font-black tracking-widest uppercase hover:scale-105 active:scale-95 transition-all shadow-xl"
+                className="px-10 py-3.5 bg-white text-black border border-black/10 rounded-full text-[14px] font-black tracking-[0.2em] uppercase hover:bg-neutral-50 active:scale-95 transition-all shadow-xl"
                >
                  关闭 / CLOSE
                </button>
                
                <button 
                 onClick={(e) => { e.stopPropagation(); handleDeletePhoto(viewingImage); }} 
-                className="group flex items-center gap-2 px-8 py-3 bg-white/40 backdrop-blur-md text-black/60 border border-black/5 rounded-full text-[11px] font-black tracking-widest uppercase hover:bg-red-600 hover:text-white hover:border-red-600 hover:scale-105 active:scale-95 transition-all shadow-lg"
+                className="px-10 py-3.5 bg-white text-black border border-black/10 rounded-full text-[14px] font-black tracking-[0.2em] uppercase hover:bg-red-50 hover:text-red-600 active:scale-95 transition-all shadow-xl"
                >
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:rotate-12">
-                   <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                   <line x1="10" y1="11" x2="10" y2="17"></line>
-                   <line x1="14" y1="11" x2="14" y2="17"></line>
-                 </svg>
-                 删除 / REMOVE
+                 删除 / DELETE
                </button>
             </div>
-          </div>
-
-          <div className="absolute bottom-10 text-[9px] font-bold text-black/20 uppercase tracking-[0.2em]">
-             COORDINATES ILLUSTRATED
           </div>
         </div>
       )}
 
       {/* Splash Screen Layer */}
       {showSplash && (
-        <div className={`absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white transition-all duration-[1200ms] ${isFading ? 'opacity-0 scale-110 blur-xl pointer-events-none' : 'opacity-100 scale-100 blur-0'}`}>
-          
-          {/* Axis Labels & Buttons - Bottom Left of Splash Screen */}
+        <div className={`absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white transition-all duration-[1200ms] ${isFading ? 'opacity-0 scale-110 blur-none pointer-events-none' : 'opacity-100 scale-100 blur-0'}`}>
           <div className="absolute bottom-10 left-10 flex flex-col gap-6 items-start pointer-events-auto">
-            {/* Axis Info Popover */}
             {activeAxis && (
               <div className="max-w-xs bg-white/80 backdrop-blur-xl border border-black/5 p-5 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="flex justify-between items-start mb-2">
@@ -378,13 +339,9 @@ function App() {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                    </button>
                 </div>
-                <p className="text-[11px] font-bold text-black/70 leading-relaxed tracking-wide text-left">
-                  {axisInfo[activeAxis]}
-                </p>
+                <p className="text-[11px] font-bold text-black/70 leading-relaxed tracking-wide text-left">{axisInfo[activeAxis]}</p>
               </div>
             )}
-
-            {/* Axis Buttons Group */}
             <div className="flex flex-col gap-2.5">
               {[
                 { label: "X轴 / 婚姻阶段 Marriage stage", id: 'X' as const },
@@ -403,13 +360,10 @@ function App() {
               ))}
             </div>
           </div>
-
           <div className="flex flex-col items-center max-w-2xl text-center gap-20 px-12">
             <div className="scale-[1.8] mb-8"><Logo /></div>
             <div className="space-y-6">
-              <h2 className="text-[11px] font-bold tracking-[0.4em] uppercase text-black/60 leading-relaxed">
-                从没有“标准人生”，<br/>而是找到属于自己的平衡。
-              </h2>
+              <h2 className="text-[11px] font-bold tracking-[0.4em] uppercase text-black/60 leading-relaxed">从没有“标准人生”，<br/>而是找到属于自己的平衡。</h2>
             </div>
             <button onClick={startExperience} className="group relative px-16 py-6 rounded-full shadow-[0_35px_60px_-15px_rgba(0,0,0,0.1)] hover:scale-105 transition-all bg-white border border-black/10">
               <div className="relative flex flex-col items-center gap-1.5">
